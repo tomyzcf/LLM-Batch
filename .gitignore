@@ -44,4 +44,4 @@ Thumbs.db
 
 # Prompts
 prompts/*
-!prompts/example.txt 
+!prompts/example*.txt 

@@ -59,11 +59,33 @@ class BatchProcessor:
         end_pos: Optional[int]
     ):
         """处理单个文件"""
+        # 设置输出文件路径
+        rel_path = file_path.relative_to(Path('inputData'))
+        base_name = rel_path.stem
+        output_dir = Path('outputData')
+        if rel_path.parent != Path('.'):
+            output_dir = output_dir / rel_path.parent
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 设置所有输出文件路径
+        log_file = output_dir / f"{base_name}_process.log"
+        output_file = output_dir / f"{base_name}_output{file_path.suffix}"
+        raw_file = output_dir / f"{base_name}_raw.json"
+        error_file = output_dir / f"{base_name}_error{file_path.suffix}"
+        
+        # 设置日志文件
+        Logger.set_log_file(log_file)
+        
         Logger.info(f"\n开始处理文件: {file_path}")
         
         try:
             current_pos = start_pos - 1
             batch_size = self.process_config.get('batch_size', 5)
+            
+            # 如果是错误记录文件，添加错误类型字段的表头
+            if file_path.suffix.lower() == '.csv':
+                with open(error_file, 'w', encoding='utf-8') as f:
+                    f.write(f"{item['content']},error_type\n")
             
             while True:
                 # 读取一批数据
@@ -93,10 +115,45 @@ class BatchProcessor:
                 # 处理结果
                 for item, result in zip(items, results):
                     if isinstance(result, Exception):
+                        # 保存错误信息到日志
                         Logger.error(f"处理失败: {str(result)}")
+                        
+                        # 保存原始数据和错误类型
+                        if file_path.suffix.lower() == '.csv':
+                            with open(error_file, 'a', encoding='utf-8') as f:
+                                f.write(f"{item['content']},API错误\n")
+                        else:
+                            error_data = json.loads(item['content'])
+                            error_data['error_type'] = 'API错误'
+                            with open(error_file, 'a', encoding='utf-8') as f:
+                                json.dump(error_data, f, ensure_ascii=False)
+                                f.write('\n')
+                                
                     elif result is None:
+                        # 保存空结果错误到日志
                         Logger.error("处理返回空结果")
-                    else:
+                        
+                        # 保存原始数据和错误类型
+                        if file_path.suffix.lower() == '.csv':
+                            with open(error_file, 'a', encoding='utf-8') as f:
+                                f.write(f"{item['content']},空结果\n")
+                        else:
+                            error_data = json.loads(item['content'])
+                            error_data['error_type'] = '空结果'
+                            with open(error_file, 'a', encoding='utf-8') as f:
+                                json.dump(error_data, f, ensure_ascii=False)
+                                f.write('\n')
+                            
+                        # 保存原始输出
+                        with open(raw_file, 'a', encoding='utf-8') as f:
+                            json.dump(result, f, ensure_ascii=False)
+                            f.write('\n')
+                            
+                        # 保存处理结果
+                        with open(output_file, 'a', encoding='utf-8') as f:
+                            json.dump(result, f, ensure_ascii=False)
+                            f.write('\n')
+                            
                         Logger.info("处理成功")
                         
                 current_pos += len(items)

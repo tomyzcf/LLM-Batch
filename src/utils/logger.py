@@ -26,20 +26,7 @@ class Logger:
             datefmt='%Y-%m-%d %H:%M:%S'
         )
         console_handler.setFormatter(console_format)
-        
-        # 文件处理器
-        log_file = Path('logs/batch_process.log')
-        log_file.parent.mkdir(exist_ok=True)
-        file_handler = logging.FileHandler(log_file, encoding='utf-8')
-        file_handler.setLevel(logging.INFO)
-        file_format = logging.Formatter(
-            '%(asctime)s [%(levelname)s] %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        file_handler.setFormatter(file_format)
-        
         self.logger.addHandler(console_handler)
-        self.logger.addHandler(file_handler)
     
     @staticmethod
     def set_level(level: str):
@@ -60,4 +47,24 @@ class Logger:
     
     @staticmethod
     def debug(msg: str):
-        Logger().logger.debug(msg) 
+        Logger().logger.debug(msg)
+    
+    @staticmethod
+    def set_log_file(log_file: Path):
+        """设置日志文件"""
+        instance = Logger()
+        # 移除旧的文件处理器
+        for handler in instance.logger.handlers[:]:
+            if isinstance(handler, logging.FileHandler):
+                instance.logger.removeHandler(handler)
+        
+        # 创建新的文件处理器
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        file_handler.setLevel(logging.INFO)
+        file_format = logging.Formatter(
+            '%(asctime)s [%(levelname)s] %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        file_handler.setFormatter(file_format)
+        instance.logger.addHandler(file_handler) 
