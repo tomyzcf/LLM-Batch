@@ -1,0 +1,52 @@
+# LLM批处理工具配置文件示例
+# 使用时请复制为 config.yaml 并修改相应配置
+
+# 选择使用的API提供商
+default_provider: "deepseek"  # 可选值: deepseek, openai
+
+# API提供商配置
+api_providers:
+  # DeepSeek API配置
+  deepseek:
+    # API密钥
+    api_key: "your-api-key"
+    # API基础URL
+    base_url: "https://api.deepseek.com"
+    # 使用的模型名称
+    model: "deepseek-chat"
+    # 最大并发请求数
+    concurrent_limit: 10
+    
+  # OpenAI API配置
+  openai:
+    api_key: "your-api-key"
+    base_url: "https://api.openai.com"
+    model: "gpt-3.5-turbo"
+    concurrent_limit: 5
+
+# 输出配置
+output:
+  # 输出格式：支持 csv（默认）, excel, json
+  format: "csv"
+  # 是否保存原始响应
+  save_raw_response: true
+  # 输出文件编码
+  encoding: "utf-8-sig"
+
+# 日志配置
+logging:
+  # 日志级别：DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
+  # 日志文件名
+  file: "batch_process.log"
+  # 日志文件编码
+  encoding: "utf-8"
+
+# 处理配置
+process:
+  # 批处理大小
+  batch_size: 5
+  # 最大重试次数
+  max_retries: 5
+  # 重试间隔（秒）
+  retry_interval: 0.5 
