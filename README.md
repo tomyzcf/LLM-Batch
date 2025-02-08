@@ -4,7 +4,11 @@
 
 A flexible batch processing tool for large language models (LLMs). Process large amounts of data through various LLM providers with configurable input/output formats and asynchronous processing.
 
-## Features
+## 🎯 Vision
+
+LLM-Batch aims to be a powerful, flexible, and user-friendly platform for processing unstructured data using large language models and multimodal models. Our goal is to help users efficiently transform various types of unstructured data into structured information, lowering the barrier to data processing and enhancing data value.
+
+## 🌟 Core Features
 
 - Multiple input formats support (CSV, Excel, JSON)
 - Multiple LLM provider support (DeepSeek, OpenAI, etc.)
@@ -13,6 +17,30 @@ A flexible batch processing tool for large language models (LLMs). Process large
 - Checkpoint support for resuming interrupted tasks
 - Comprehensive logging system
 - Extensible provider interface
+
+## 🗺️ Roadmap Overview
+
+- ✅ **Phase 1**: Core Capabilities (Current)
+  - Basic text processing
+  - Multiple LLM providers support
+  - Configuration-driven processing
+
+- 🚀 **Phase 2**: Enhanced Features
+  - Multimodal model support
+  - Data pre/post processing toolkit
+  - Batch processing interface
+
+- 📋 **Phase 3**: Vertical Solutions
+  - Industry best practices
+  - Multi-language support
+  - Processing templates
+
+- 🌐 **Phase 4**: Ecosystem
+  - Web interface
+  - Plugin system
+  - API service
+
+[View Full Roadmap](ROADMAP.md)
 
 ## Directory Structure
 
@@ -126,13 +154,7 @@ See [configuration documentation](docs/requirements.md) for details.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the project
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
 
 ## License
 
