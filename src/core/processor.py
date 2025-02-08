@@ -3,6 +3,7 @@ import asyncio
 from typing import Dict, Any, List, Optional
 import json
 from tqdm import tqdm
+import datetime
 
 from ..utils.logger import Logger
 from ..utils.config import Config
@@ -72,20 +73,54 @@ class BatchProcessor:
         output_file = output_dir / f"{base_name}_output{file_path.suffix}"
         raw_file = output_dir / f"{base_name}_raw.json"
         error_file = output_dir / f"{base_name}_error{file_path.suffix}"
+        progress_file = output_dir / f"{base_name}_progress.json"
         
         # 设置日志文件
         Logger.set_log_file(log_file)
         
+        # 打印配置信息
+        Logger.info("批处理任务配置信息:")
+        Logger.info(f"API提供商: {self.config.default_provider}")
+        Logger.info(f"模型: {self.provider.model}")
+        Logger.info(f"批处理大小: {self.process_config.get('batch_size', 5)}")
+        Logger.info(f"最大重试次数: {self.process_config.get('max_retries', 5)}")
+        Logger.info(f"重试间隔: {self.process_config.get('retry_interval', 0.5)}秒")
+        Logger.info(f"输入文件: {file_path}")
+        Logger.info(f"输出目录: {output_dir}")
+        if fields:
+            Logger.info(f"处理字段: {fields}")
+        Logger.info("---" * 20)
+        
+        # 加载处理进度
+        current_pos = start_pos - 1
+        if progress_file.exists():
+            try:
+                with open(progress_file, 'r', encoding='utf-8') as f:
+                    progress_data = json.load(f)
+                    current_pos = max(current_pos, progress_data.get('last_position', current_pos))
+                    Logger.info(f"从上次的进度继续处理: 第 {current_pos + 1} 行")
+            except Exception as e:
+                Logger.error(f"读取进度文件失败: {str(e)}")
+        
         Logger.info(f"\n开始处理文件: {file_path}")
+        Logger.info(f"处理范围: 第 {current_pos + 1} 行 到 {end_pos if end_pos else '文件末尾'}")
+        
+        # 统计信息
+        stats = {
+            'total': 0,
+            'success': 0,
+            'api_error': 0,
+            'empty_result': 0,
+            'other_error': 0
+        }
         
         try:
-            current_pos = start_pos - 1
             batch_size = self.process_config.get('batch_size', 5)
             
             # 如果是错误记录文件，添加错误类型字段的表头
             if file_path.suffix.lower() == '.csv':
                 with open(error_file, 'w', encoding='utf-8') as f:
-                    f.write(f"{item['content']},error_type\n")
+                    f.write("content,error_type\n")
             
             while True:
                 # 读取一批数据
@@ -98,7 +133,10 @@ class BatchProcessor:
                 
                 if not items or (end_pos and current_pos >= end_pos):
                     break
-                    
+                
+                stats['total'] += len(items)
+                Logger.info(f"正在处理第 {current_pos + 1} 到 {current_pos + len(items)} 行...")
+                
                 # 处理这一批数据
                 tasks = []
                 for item in items:
@@ -115,6 +153,7 @@ class BatchProcessor:
                 # 处理结果
                 for item, result in zip(items, results):
                     if isinstance(result, Exception):
+                        stats['api_error'] += 1
                         # 保存错误信息到日志
                         Logger.error(f"处理失败: {str(result)}")
                         
@@ -130,6 +169,7 @@ class BatchProcessor:
                                 f.write('\n')
                                 
                     elif result is None:
+                        stats['empty_result'] += 1
                         # 保存空结果错误到日志
                         Logger.error("处理返回空结果")
                         
@@ -144,6 +184,12 @@ class BatchProcessor:
                                 json.dump(error_data, f, ensure_ascii=False)
                                 f.write('\n')
                             
+                        # 只保存原始输出到raw文件
+                        with open(raw_file, 'a', encoding='utf-8') as f:
+                            json.dump(result, f, ensure_ascii=False)
+                            f.write('\n')
+                    else:
+                        stats['success'] += 1
                         # 保存原始输出
                         with open(raw_file, 'a', encoding='utf-8') as f:
                             json.dump(result, f, ensure_ascii=False)
@@ -154,10 +200,37 @@ class BatchProcessor:
                             json.dump(result, f, ensure_ascii=False)
                             f.write('\n')
                             
-                        Logger.info("处理成功")
-                        
+                        Logger.info(f"成功处理第 {current_pos + 1} 行")
+                
+                # 保存进度
                 current_pos += len(items)
+                with open(progress_file, 'w', encoding='utf-8') as f:
+                    json.dump({
+                        'last_position': current_pos,
+                        'last_update': datetime.datetime.now().isoformat(),
+                        'stats': stats
+                    }, f, ensure_ascii=False, indent=2)
+                
+                # 根据配置决定是否输出统计信息
+                if Logger.should_show_stats(stats['total']):
+                    Logger.info(f"\n当前处理统计:\n" + 
+                              f"总处理: {stats['total']}\n" +
+                              f"成功: {stats['success']}\n" +
+                              f"API错误: {stats['api_error']}\n" +
+                              f"空结果: {stats['empty_result']}\n" +
+                              f"其他错误: {stats['other_error']}")
+                elif Logger.should_show_progress():
+                    Logger.info(f"已处理: {stats['total']} 条")
                 
         except Exception as e:
+            stats['other_error'] += 1
             Logger.error(f"处理文件时出错: {str(e)}")
-            return 
+            return
+        finally:
+            # 输出最终统计信息
+            Logger.info(f"\n处理完成。最终统计:\n" + 
+                      f"总处理: {stats['total']}\n" +
+                      f"成功: {stats['success']}\n" +
+                      f"API错误: {stats['api_error']}\n" +
+                      f"空结果: {stats['empty_result']}\n" +
+                      f"其他错误: {stats['other_error']}") 

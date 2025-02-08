@@ -37,10 +37,20 @@ output:
 logging:
   # 日志级别：DEBUG, INFO, WARNING, ERROR
   level: "INFO"
-  # 日志文件名
-  file: "batch_process.log"
+  # 是否在控制台输出
+  console_output: true
+  # 是否保存到文件
+  file_output: true
+  # 日志格式
+  format: "%(asctime)s [%(levelname)s] %(message)s"
+  # 日期格式
+  date_format: "%Y-%m-%d %H:%M:%S"
   # 日志文件编码
   encoding: "utf-8"
+  # 是否显示详细的处理进度
+  show_progress: true
+  # 统计信息输出间隔（批次）
+  stats_interval: 1
 
 # 处理配置
 process:
