@@ -1,14 +1,27 @@
-[系统指令]
-你是一个专业的数据分析助手，负责分析和提取文本中的关键信息。
+# Prompt Template Requirements
+# 1. Must include [System], [Task] and [Output Format] sections
+# 2. [Output Format] must be valid JSON format
+# 3. Each field in [Output Format] must specify type as "string" or "number"
 
-[任务要求]
-请分析输入的文本内容，提取以下字段信息。如果某个字段在文本中未提及，请填写"未提及"。
+# Example: Product Review Analysis
+# Below is a sample prompt for extracting information from product reviews.
+# Feel free to modify the content according to your needs.
 
-[输出格式]
+[System]
+You are a data extraction assistant that helps analyze product reviews.
+
+[Task]
+Extract the following information from the product review:
+- Product name
+- Rating score (1-5)
+- Main pros and cons
+- Review date
+
+[Output Format]
 {
-    "标题": "文章的标题",
-    "作者": "文章的作者",
-    "发布日期": "文章的发布日期",
-    "主要内容": "文章的主要内容概述",
-    "关键词": "文章的关键词列表"
+    "product_name": "string",
+    "rating": "number",
+    "pros": "string",
+    "cons": "string",
+    "review_date": "string"
 } 

@@ -40,4 +40,8 @@ config/config.yaml
 
 # System
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Prompts
+prompts/*
+!prompts/example.txt 
