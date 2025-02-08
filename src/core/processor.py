@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Optional
 import json
 from tqdm import tqdm
 import datetime
+import csv
 
 from ..utils.logger import Logger
 from ..utils.config import Config
@@ -122,6 +123,9 @@ class BatchProcessor:
                 with open(error_file, 'w', encoding='utf-8') as f:
                     f.write("content,error_type\n")
             
+            # 输出文件的表头会在第一次写入数据时创建
+            output_headers = None
+            
             while True:
                 # 读取一批数据
                 items = FileProcessor.read_file_batch(
@@ -196,9 +200,17 @@ class BatchProcessor:
                             f.write('\n')
                             
                         # 保存处理结果
-                        with open(output_file, 'a', encoding='utf-8') as f:
-                            json.dump(result, f, ensure_ascii=False)
-                            f.write('\n')
+                        if output_headers is None and result:
+                            # 从第一个成功的结果中获取字段名
+                            output_headers = list(result.keys())
+                            # 写入表头
+                            with open(output_file, 'w', encoding='utf-8-sig', newline='') as f:
+                                writer = csv.DictWriter(f, fieldnames=output_headers)
+                                writer.writeheader()
+                                
+                        with open(output_file, 'a', encoding='utf-8-sig', newline='') as f:
+                            writer = csv.DictWriter(f, fieldnames=output_headers)
+                            writer.writerow(result)
                             
                         Logger.info(f"成功处理第 {current_pos + 1} 行")
                 

@@ -2,7 +2,7 @@ from typing import Dict, Any
 from .base import BaseProvider
 from .aliyun import AliyunProvider
 try:
-    from .deepseek import DeepseekProvider
+    from .deepseek import DeepSeekProvider as DeepseekProvider
 except ImportError:
     DeepseekProvider = None
 try:
@@ -35,11 +35,11 @@ class ProviderFactory:
         }
         
         provider_class = providers.get(provider_type.lower())
-        if not provider_class:
-            raise ValueError(f"不支持的API提供商类型: {provider_type}")
-            
         if provider_class is None:
-            raise ValueError(f"API提供商 {provider_type} 的实现未找到")
+            if provider_type.lower() not in providers:
+                raise ValueError(f"不支持的API提供商类型: {provider_type}")
+            else:
+                raise ValueError(f"API提供商 {provider_type} 的实现未找到，请确保相关文件存在")
             
         if 'api_providers' not in config or provider_type not in config['api_providers']:
             raise ValueError(f"配置文件中缺少 {provider_type} 的API配置")

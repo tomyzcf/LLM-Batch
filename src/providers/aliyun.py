@@ -35,17 +35,7 @@ class AliyunProvider(BaseProvider):
         user_content: str,
         retry_count: int = 0
     ) -> Optional[Dict[str, Any]]:
-        """处理单个请求
-        
-        Args:
-            session: API会话
-            system_content: 系统提示词
-            user_content: 用户输入内容
-            retry_count: 当前重试次数
-            
-        Returns:
-            处理结果或None（如果处理失败）
-        """
+        """处理单个请求"""
         try:
             data = {
                 "model": self.model,
@@ -62,7 +52,22 @@ class AliyunProvider(BaseProvider):
             ) as response:
                 if response.status == 200:
                     result = await response.json()
-                    return result
+                    # 从API响应中提取LLM返回的内容
+                    if 'choices' in result and len(result['choices']) > 0:
+                        content = result['choices'][0]['message']['content']
+                        # 提取JSON字符串并解析
+                        try:
+                            import re
+                            import json
+                            # 使用正则表达式提取JSON部分
+                            json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                            if json_match:
+                                json_str = json_match.group()
+                                return json.loads(json_str)
+                        except Exception as e:
+                            Logger.error(f"解析LLM返回的JSON失败: {str(e)}")
+                            return None
+                    return None
                 elif response.status in [429, 503]:
                     if retry_count < self.max_retries:
                         retry_delay = min(2 ** retry_count * self.retry_interval, 10)

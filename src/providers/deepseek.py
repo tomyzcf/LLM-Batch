@@ -1,11 +1,24 @@
 from typing import Dict, Any, Optional
 import aiohttp
 import json
+import asyncio
 from .base import BaseProvider
 from ..utils.logger import Logger
 
 class DeepSeekProvider(BaseProvider):
     """DeepSeek API提供商"""
+    
+    def __init__(self, config: Dict[str, Any]):
+        """初始化DeepSeek API提供商
+        
+        Args:
+            config: API提供商配置
+        """
+        super().__init__(config)
+        self.api_key = config['api_key']
+        self.base_url = config['base_url']
+        self.model = config['model']
+        self.semaphore = asyncio.Semaphore(config.get('concurrent_limit', 10))
     
     async def create_session(self) -> aiohttp.ClientSession:
         return aiohttp.ClientSession(
