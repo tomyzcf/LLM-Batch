@@ -73,10 +73,18 @@ logging:
   date_format: "%Y-%m-%d %H:%M:%S"
   # 日志文件编码
   encoding: "utf-8"
-  # 是否显示详细的处理进度
-  show_progress: true
-  # 统计信息输出间隔（批次）
-  stats_interval: 1
+  # 统计信息输出间隔（批次数）
+  stats_interval: 10
+  # 进度条配置
+  progress:
+    # 是否显示进度条
+    show_progress_bar: true
+    # 进度条更新间隔（秒）
+    update_interval: 0.1
+    # 进度条格式
+    bar_format: "{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]"
+    # 是否在进度条中显示处理速度
+    show_speed: true
 
 # 处理配置
 process:

@@ -139,124 +139,136 @@ class BatchProcessor:
             # 输出文件的表头会在第一次写入数据时创建
             output_headers = None
             
-            while True:
-                # 读取一批数据
-                items = FileProcessor.read_file_batch(
-                    file_path,
-                    current_pos,
-                    batch_size,
-                    fields
+            # 获取总行数
+            total_lines = sum(1 for _ in open(file_path, 'r', encoding='utf-8')) - 1  # 减去表头
+            if end_pos:
+                total_lines = min(total_lines, end_pos - start_pos + 1)
+            else:
+                total_lines = total_lines - start_pos + 1
+                
+            # 创建进度条
+            progress_config = self.config.logging_config.get('progress', {})
+            if progress_config.get('show_progress_bar', True):
+                pbar = tqdm(
+                    total=total_lines,
+                    desc="处理进度",
+                    unit="条",
+                    bar_format=progress_config.get('bar_format'),
+                    mininterval=progress_config.get('update_interval', 0.1)
                 )
-                
-                if not items or (end_pos and current_pos >= end_pos):
-                    break
-                
-                stats['total'] += len(items)
-                Logger.info(f"正在处理第 {current_pos + 1} 到 {current_pos + len(items)} 行...")
-                
-                # 处理这一批数据
-                tasks = []
-                for item in items:
-                    task = self.provider.process_request(
-                        session,
-                        prompt_content,
-                        item['content']
+            else:
+                pbar = None
+            
+            try:
+                while True:
+                    # 读取一批数据
+                    items = FileProcessor.read_file_batch(
+                        file_path,
+                        current_pos,
+                        batch_size,
+                        fields
                     )
-                    tasks.append(task)
-                
-                # 等待所有任务完成
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-                
-                # 处理结果
-                for item, result in zip(items, results):
-                    if isinstance(result, Exception):
-                        stats['api_error'] += 1
-                        # 保存错误信息到日志
-                        Logger.error(f"处理失败: {str(result)}")
-                        
-                        # 保存原始数据和错误类型
-                        if file_path.suffix.lower() == '.csv':
-                            with open(error_file, 'a', encoding='utf-8') as f:
-                                f.write(f"{item['content']},API错误\n")
-                        else:
-                            error_data = json.loads(item['content'])
-                            error_data['error_type'] = 'API错误'
-                            with open(error_file, 'a', encoding='utf-8') as f:
-                                json.dump(error_data, f, ensure_ascii=False)
-                                f.write('\n')
-                                
-                    elif result is None:
-                        stats['empty_result'] += 1
-                        # 保存空结果错误到日志
-                        Logger.error("处理返回空结果")
-                        
-                        # 保存原始数据和错误类型
-                        if file_path.suffix.lower() == '.csv':
-                            with open(error_file, 'a', encoding='utf-8') as f:
-                                f.write(f"{item['content']},空结果\n")
-                        else:
-                            error_data = json.loads(item['content'])
-                            error_data['error_type'] = '空结果'
-                            with open(error_file, 'a', encoding='utf-8') as f:
-                                json.dump(error_data, f, ensure_ascii=False)
-                                f.write('\n')
+                    
+                    if not items or (end_pos and current_pos >= end_pos):
+                        break
+                    
+                    stats['total'] += len(items)
+                    
+                    # 处理这一批数据
+                    tasks = []
+                    for item in items:
+                        task = self.provider.process_request(
+                            session,
+                            prompt_content,
+                            item['content']
+                        )
+                        tasks.append(task)
+                    
+                    # 等待所有任务完成
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    
+                    # 处理结果
+                    for item, result in zip(items, results):
+                        if isinstance(result, Exception):
+                            stats['api_error'] += 1
+                            Logger.error(f"处理失败: {str(result)}")
                             
-                        # 只保存原始输出到raw文件
-                        with open(raw_file, 'a', encoding='utf-8') as f:
-                            json.dump(result, f, ensure_ascii=False)
-                            f.write('\n')
-                    else:
-                        stats['success'] += 1
-                        # 保存原始输出
-                        with open(raw_file, 'a', encoding='utf-8') as f:
-                            json.dump(result, f, ensure_ascii=False)
-                            f.write('\n')
-                            
-                        # 保存处理结果
-                        if output_headers is None and result:
-                            # 从第一个成功的结果中获取字段名
-                            output_headers = list(result.keys())
-                            # 只有在文件不存在时才写入表头
-                            if not output_file.exists():
-                                with open(output_file, 'w', encoding='utf-8-sig', newline='') as f:
-                                    writer = csv.DictWriter(f, fieldnames=output_headers)
-                                    writer.writeheader()
+                            if file_path.suffix.lower() == '.csv':
+                                with open(error_file, 'a', encoding='utf-8') as f:
+                                    f.write(f"{item['content']},API错误\n")
                             else:
-                                # 如果文件已存在，读取其表头
-                                with open(output_file, 'r', encoding='utf-8-sig', newline='') as f:
-                                    reader = csv.reader(f)
-                                    existing_headers = next(reader)
-                                    if existing_headers != output_headers:
-                                        Logger.warning(f"警告：现有文件的表头与当前结果的字段不匹配")
-                                        Logger.warning(f"现有表头: {existing_headers}")
-                                        Logger.warning(f"当前字段: {output_headers}")
-                                
-                        with open(output_file, 'a', encoding='utf-8-sig', newline='') as f:
-                            writer = csv.DictWriter(f, fieldnames=output_headers)
-                            writer.writerow(result)
+                                error_data = json.loads(item['content'])
+                                error_data['error_type'] = 'API错误'
+                                with open(error_file, 'a', encoding='utf-8') as f:
+                                    json.dump(error_data, f, ensure_ascii=False)
+                                    f.write('\n')
+                                    
+                        elif result is None:
+                            stats['empty_result'] += 1
+                            Logger.error("处理返回空结果")
                             
-                        Logger.info(f"成功处理第 {current_pos + 1} 行")
-                
-                # 保存进度
-                current_pos += len(items)
-                with open(progress_file, 'w', encoding='utf-8') as f:
-                    json.dump({
-                        'last_position': current_pos,
-                        'last_update': datetime.datetime.now().isoformat(),
-                        'stats': stats
-                    }, f, ensure_ascii=False, indent=2)
-                
-                # 根据配置决定是否输出统计信息
-                if Logger.should_show_stats(stats['total']):
-                    Logger.info(f"\n当前处理统计:\n" + 
-                              f"总处理: {stats['total']}\n" +
-                              f"成功: {stats['success']}\n" +
-                              f"API错误: {stats['api_error']}\n" +
-                              f"空结果: {stats['empty_result']}\n" +
-                              f"其他错误: {stats['other_error']}")
-                elif Logger.should_show_progress():
-                    Logger.info(f"已处理: {stats['total']} 条")
-                
+                            if file_path.suffix.lower() == '.csv':
+                                with open(error_file, 'a', encoding='utf-8') as f:
+                                    f.write(f"{item['content']},空结果\n")
+                            else:
+                                error_data = json.loads(item['content'])
+                                error_data['error_type'] = '空结果'
+                                with open(error_file, 'a', encoding='utf-8') as f:
+                                    json.dump(error_data, f, ensure_ascii=False)
+                                    f.write('\n')
+                            
+                            with open(raw_file, 'a', encoding='utf-8') as f:
+                                json.dump(result, f, ensure_ascii=False)
+                                f.write('\n')
+                        else:
+                            stats['success'] += 1
+                            with open(raw_file, 'a', encoding='utf-8') as f:
+                                json.dump(result, f, ensure_ascii=False)
+                                f.write('\n')
+                                
+                            if output_headers is None and result:
+                                output_headers = list(result.keys())
+                                if not output_file.exists():
+                                    with open(output_file, 'w', encoding='utf-8-sig', newline='') as f:
+                                        writer = csv.DictWriter(f, fieldnames=output_headers)
+                                        writer.writeheader()
+                                else:
+                                    with open(output_file, 'r', encoding='utf-8-sig', newline='') as f:
+                                        reader = csv.reader(f)
+                                        existing_headers = next(reader)
+                                        if existing_headers != output_headers:
+                                            Logger.warning(f"警告：现有文件的表头与当前结果的字段不匹配")
+                                            Logger.warning(f"现有表头: {existing_headers}")
+                                            Logger.warning(f"当前字段: {output_headers}")
+                                    
+                            with open(output_file, 'a', encoding='utf-8-sig', newline='') as f:
+                                writer = csv.DictWriter(f, fieldnames=output_headers)
+                                writer.writerow(result)
+                    
+                    # 更新进度条
+                    if pbar:
+                        pbar.update(len(items))
+                    
+                    # 保存进度
+                    current_pos += len(items)
+                    with open(progress_file, 'w', encoding='utf-8') as f:
+                        json.dump({
+                            'last_position': current_pos,
+                            'last_update': datetime.datetime.now().isoformat(),
+                            'stats': stats
+                        }, f, ensure_ascii=False, indent=2)
+                    
+                    # 定期输出统计信息
+                    if Logger.should_show_stats(stats['total']):
+                        Logger.info(f"\n当前处理统计:\n" + 
+                                  f"总处理: {stats['total']}\n" +
+                                  f"成功: {stats['success']}\n" +
+                                  f"API错误: {stats['api_error']}\n" +
+                                  f"空结果: {stats['empty_result']}\n" +
+                                  f"其他错误: {stats['other_error']}")
+            finally:
+                if pbar:
+                    pbar.close()
         except Exception as e:
             stats['other_error'] += 1
             Logger.error(f"处理文件时出错: {str(e)}")
