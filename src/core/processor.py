@@ -131,8 +131,8 @@ class BatchProcessor:
         try:
             batch_size = self.process_config.get('batch_size', 5)
             
-            # 如果是错误记录文件，添加错误类型字段的表头
-            if file_path.suffix.lower() == '.csv':
+            # 如果是错误记录文件，只在文件不存在时添加表头
+            if file_path.suffix.lower() == '.csv' and not error_file.exists():
                 with open(error_file, 'w', encoding='utf-8') as f:
                     f.write("content,error_type\n")
             

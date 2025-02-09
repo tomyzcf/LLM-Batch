@@ -80,6 +80,7 @@ class Logger:
         log_file.parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.FileHandler(
             log_file, 
+            mode='a',  # 使用追加模式
             encoding=log_config.get('encoding', 'utf-8')
         )
         file_handler.setLevel(getattr(logging, log_config.get('level', 'INFO').upper()))
