@@ -55,6 +55,8 @@ llm_batch_processor/
 ├── outputData/          # 输出数据目录
 ├── prompts/             # 提示词文件目录
 ├── logs/                # 日志目录
+├── tools/               # 工具脚本
+│   └── data_quality_check.py  # 数据质量检查工具
 └── docs/                # 文档目录
 ```
 
@@ -158,4 +160,11 @@ python main.py input.csv prompt.txt --provider openai
 
 ## 许可证
 
-该项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。 
+该项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
+
+## 工具集
+
+### 数据质量检查
+
+独立的数据质量检查工具，支持多种文件格式（CSV、Excel、JSON、Parquet等）的数据质量检查。
+运行 `python tools/data_quality_check.py --help` 获取详细使用说明。 

@@ -55,6 +55,8 @@ llm_batch_processor/
 ├── outputData/          # Output data directory
 ├── prompts/             # Prompt template files
 ├── logs/                # Log files
+├── tools/               # Utility tools
+│   └── data_quality_check.py  # Data quality checking tool
 └── docs/                # Documentation
 ```
 
@@ -158,4 +160,11 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. 
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Tools
+
+### Data Quality Check
+
+A standalone tool for checking data quality of various file formats (CSV, Excel, JSON, Parquet, etc.). 
+Run `python tools/data_quality_check.py --help` for detailed usage information. 
