@@ -125,6 +125,7 @@ class BatchProcessor:
             'success': 0,
             'api_error': 0,
             'empty_result': 0,
+            'json_error': 0,
             'other_error': 0
         }
         
@@ -221,29 +222,59 @@ class BatchProcessor:
                                 json.dump(result, f, ensure_ascii=False)
                                 f.write('\n')
                         else:
-                            stats['success'] += 1
-                            with open(raw_file, 'a', encoding='utf-8') as f:
-                                json.dump(result, f, ensure_ascii=False)
-                                f.write('\n')
-                                
-                            if output_headers is None and result:
-                                output_headers = list(result.keys())
-                                if not output_file.exists():
-                                    with open(output_file, 'w', encoding='utf-8-sig', newline='') as f:
-                                        writer = csv.DictWriter(f, fieldnames=output_headers)
-                                        writer.writeheader()
-                                else:
-                                    with open(output_file, 'r', encoding='utf-8-sig', newline='') as f:
-                                        reader = csv.reader(f)
-                                        existing_headers = next(reader)
-                                        if existing_headers != output_headers:
-                                            Logger.warning(f"警告：现有文件的表头与当前结果的字段不匹配")
-                                            Logger.warning(f"现有表头: {existing_headers}")
-                                            Logger.warning(f"当前字段: {output_headers}")
+                            try:
+                                # 预处理JSON字符串，使用正则表达式处理未加引号的特殊值
+                                if isinstance(result, str):
+                                    import re
+                                    # 1. 提取JSON内容（去除所有非JSON文本）
+                                    result = re.sub(r'^[^{]*({.*})[^}]*$', r'\1', result.strip())
                                     
-                            with open(output_file, 'a', encoding='utf-8-sig', newline='') as f:
-                                writer = csv.DictWriter(f, fieldnames=output_headers)
-                                writer.writerow(result)
+                                    # 2. 处理特殊值
+                                    result = re.sub(r':\s*(无相关内容|NA)\s*(?=,|\n|\s*})', r': "\1"', result)
+                                    
+                                    # 3. 确保数字字段不带引号
+                                    result = re.sub(r'"(判决依据条款数目|判断案件受理费金额)":\s*"(\d+)"', r'"\1": \2', result)
+                                    
+                                    # 尝试解析JSON
+                                    result = json.loads(result)
+                                
+                                stats['success'] += 1
+                                with open(raw_file, 'a', encoding='utf-8') as f:
+                                    json.dump(result, f, ensure_ascii=False)
+                                    f.write('\n')
+                                    
+                                if output_headers is None and result:
+                                    output_headers = list(result.keys())
+                                    if not output_file.exists():
+                                        with open(output_file, 'w', encoding='utf-8-sig', newline='') as f:
+                                            writer = csv.DictWriter(f, fieldnames=output_headers)
+                                            writer.writeheader()
+                                    else:
+                                        with open(output_file, 'r', encoding='utf-8-sig', newline='') as f:
+                                            reader = csv.reader(f)
+                                            existing_headers = next(reader)
+                                            if existing_headers != output_headers:
+                                                Logger.warning(f"警告：现有文件的表头与当前结果的字段不匹配")
+                                                Logger.warning(f"现有表头: {existing_headers}")
+                                                Logger.warning(f"当前字段: {output_headers}")
+                                        
+                                with open(output_file, 'a', encoding='utf-8-sig', newline='') as f:
+                                    writer = csv.DictWriter(f, fieldnames=output_headers)
+                                    writer.writerow(result)
+                            except json.JSONDecodeError as e:
+                                stats['json_error'] += 1
+                                Logger.error(f"JSON解析失败: {result}")
+                                Logger.error(f"错误详情: {str(e)}")
+                                
+                                if file_path.suffix.lower() == '.csv':
+                                    with open(error_file, 'a', encoding='utf-8') as f:
+                                        f.write(f"{item['content']},JSON解析错误\n")
+                                else:
+                                    error_data = json.loads(item['content'])
+                                    error_data['error_type'] = 'JSON解析错误'
+                                    with open(error_file, 'a', encoding='utf-8') as f:
+                                        json.dump(error_data, f, ensure_ascii=False)
+                                        f.write('\n')
                     
                     # 更新进度条
                     if pbar:
@@ -265,6 +296,7 @@ class BatchProcessor:
                                   f"成功: {stats['success']}\n" +
                                   f"API错误: {stats['api_error']}\n" +
                                   f"空结果: {stats['empty_result']}\n" +
+                                  f"JSON解析错误: {stats['json_error']}\n" +
                                   f"其他错误: {stats['other_error']}")
             finally:
                 if pbar:
@@ -280,4 +312,5 @@ class BatchProcessor:
                       f"成功: {stats['success']}\n" +
                       f"API错误: {stats['api_error']}\n" +
                       f"空结果: {stats['empty_result']}\n" +
+                      f"JSON解析错误: {stats['json_error']}\n" +
                       f"其他错误: {stats['other_error']}") 
