@@ -5,6 +5,7 @@ import json
 from tqdm import tqdm
 import datetime
 import csv
+import shutil
 
 from ..utils.logger import Logger
 from ..utils.config import Config
@@ -75,6 +76,18 @@ class BatchProcessor:
         raw_file = output_dir / f"{base_name}_raw.json"
         error_file = output_dir / f"{base_name}_error{file_path.suffix}"
         progress_file = output_dir / f"{base_name}_progress.json"
+        
+        # 创建备份
+        backup_dir = output_dir / "backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # 备份现有文件
+        for f in [output_file, raw_file, error_file, progress_file]:
+            if f.exists():
+                backup_file = backup_dir / f"{f.stem}_{timestamp}{f.suffix}"
+                shutil.copy2(f, backup_file)
+                Logger.info(f"已创建文件备份: {backup_file}")
         
         # 设置日志文件
         Logger.set_log_file(log_file)
@@ -203,10 +216,20 @@ class BatchProcessor:
                         if output_headers is None and result:
                             # 从第一个成功的结果中获取字段名
                             output_headers = list(result.keys())
-                            # 写入表头
-                            with open(output_file, 'w', encoding='utf-8-sig', newline='') as f:
-                                writer = csv.DictWriter(f, fieldnames=output_headers)
-                                writer.writeheader()
+                            # 只有在文件不存在时才写入表头
+                            if not output_file.exists():
+                                with open(output_file, 'w', encoding='utf-8-sig', newline='') as f:
+                                    writer = csv.DictWriter(f, fieldnames=output_headers)
+                                    writer.writeheader()
+                            else:
+                                # 如果文件已存在，读取其表头
+                                with open(output_file, 'r', encoding='utf-8-sig', newline='') as f:
+                                    reader = csv.reader(f)
+                                    existing_headers = next(reader)
+                                    if existing_headers != output_headers:
+                                        Logger.warning(f"警告：现有文件的表头与当前结果的字段不匹配")
+                                        Logger.warning(f"现有表头: {existing_headers}")
+                                        Logger.warning(f"当前字段: {output_headers}")
                                 
                         with open(output_file, 'a', encoding='utf-8-sig', newline='') as f:
                             writer = csv.DictWriter(f, fieldnames=output_headers)
