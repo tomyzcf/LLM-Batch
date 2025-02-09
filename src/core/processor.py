@@ -138,6 +138,9 @@ class BatchProcessor:
             'other_error': 0
         }
         
+        # 批次计数器
+        batch_count = 0
+        
         try:
             batch_size = self.process_config.get('batch_size', 5)
             
@@ -282,6 +285,9 @@ class BatchProcessor:
                     if pbar:
                         pbar.update(len(items))
                     
+                    # 更新批次计数
+                    batch_count += 1
+                    
                     # 保存进度
                     current_pos += len(items)
                     with open(progress_file, 'w', encoding='utf-8') as f:
@@ -292,7 +298,7 @@ class BatchProcessor:
                         }, f, ensure_ascii=False, indent=2)
                     
                     # 定期输出统计信息
-                    if Logger.should_show_stats(stats['total']):
+                    if Logger.should_show_stats(batch_count):
                         Logger.info(f"\n当前处理统计:\n" + 
                                   f"总处理: {stats['total']}\n" +
                                   f"成功: {stats['success']}\n" +
