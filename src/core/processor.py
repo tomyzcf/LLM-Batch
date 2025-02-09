@@ -105,6 +105,11 @@ class BatchProcessor:
             Logger.info(f"处理字段: {fields}")
         Logger.info("---" * 20)
         
+        # 获取总行数和剩余行数
+        file_total_lines = sum(1 for _ in open(file_path, 'r', encoding='utf-8')) - 1  # 减去表头
+        if end_pos:
+            file_total_lines = min(file_total_lines, end_pos)
+        
         # 加载处理进度
         current_pos = start_pos - 1
         if progress_file.exists():
@@ -116,8 +121,12 @@ class BatchProcessor:
             except Exception as e:
                 Logger.error(f"读取进度文件失败: {str(e)}")
         
+        # 计算剩余需要处理的行数
+        remaining_lines = file_total_lines - current_pos
+        
         Logger.info(f"\n开始处理文件: {file_path}")
         Logger.info(f"处理范围: 第 {current_pos + 1} 行 到 {end_pos if end_pos else '文件末尾'}")
+        Logger.info(f"剩余行数: {remaining_lines}")
         
         # 统计信息
         stats = {
@@ -140,18 +149,11 @@ class BatchProcessor:
             # 输出文件的表头会在第一次写入数据时创建
             output_headers = None
             
-            # 获取总行数
-            total_lines = sum(1 for _ in open(file_path, 'r', encoding='utf-8')) - 1  # 减去表头
-            if end_pos:
-                total_lines = min(total_lines, end_pos - start_pos + 1)
-            else:
-                total_lines = total_lines - start_pos + 1
-                
-            # 创建进度条
+            # 创建进度条，使用剩余行数
             progress_config = self.config.logging_config.get('progress', {})
             if progress_config.get('show_progress_bar', True):
                 pbar = tqdm(
-                    total=total_lines,
+                    total=remaining_lines,
                     desc="处理进度",
                     unit="条",
                     bar_format=progress_config.get('bar_format'),
