@@ -9,6 +9,10 @@ try:
     from .openai import OpenAIProvider
 except ImportError:
     OpenAIProvider = None
+try:
+    from .volcengine import VolcengineProvider
+except ImportError:
+    VolcengineProvider = None
 from ..utils.logger import Logger
 
 class ProviderFactory:
@@ -31,7 +35,8 @@ class ProviderFactory:
         providers = {
             'aliyun': AliyunProvider,
             'deepseek': DeepseekProvider,
-            'openai': OpenAIProvider
+            'openai': OpenAIProvider,
+            'volcengine': VolcengineProvider
         }
         
         provider_class = providers.get(provider_type.lower())

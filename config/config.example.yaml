@@ -2,21 +2,16 @@
 # 使用时请复制为 config.yaml 并修改相应配置
 
 # 选择使用的API提供商
-default_provider: "aliyun"  # 可选值: aliyun, deepseek, openai
+default_provider: "aliyun"  # 可选值: aliyun, deepseek, openai, volcengine
 
 # API提供商配置
 api_providers:
   # 阿里云 API配置
   aliyun:
-    # API密钥
-    api_key: "your-api-key"
-    # API基础URL
+    api_key: "your-aliyun-api-key"
     base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    # 使用的模型名称
     model: "qwen-plus-0112"
-    # 最大并发请求数
     concurrent_limit: 10
-    # 模型参数
     model_params:
       temperature: 0.7
       top_p: 0.8
@@ -24,7 +19,7 @@ api_providers:
   
   # DeepSeek API配置
   deepseek:
-    api_key: "your-api-key"
+    api_key: "your-deepseek-api-key"
     base_url: "https://api.deepseek.com"
     model: "deepseek-chat"
     concurrent_limit: 10
@@ -35,10 +30,21 @@ api_providers:
     
   # OpenAI API配置
   openai:
-    api_key: "your-api-key"
+    api_key: "your-openai-api-key"
     base_url: "https://api.openai.com"
     model: "gpt-3.5-turbo"
     concurrent_limit: 5
+    model_params:
+      temperature: 0.7
+      top_p: 0.8
+      max_tokens: 2000
+    
+  # 火山引擎 API配置 注意！！！火山方舟引擎比较特殊，需要配置接入点名称而不是模型名称，这里容易出错
+  volcengine:
+    api_key: "your-volcengine-api-key"
+    base_url: "https://ark.cn-beijing.volces.com"
+    model: "ep-******-9****"
+    concurrent_limit: 10
     model_params:
       temperature: 0.7
       top_p: 0.8
