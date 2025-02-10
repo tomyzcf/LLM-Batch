@@ -182,28 +182,71 @@ class DataQualityChecker:
             "字符串长度统计": self.check_string_length()
         }
 
-    def get_sample_record(self) -> Dict:
-        """获取随机样例记录"""
-        if self.data is None or len(self.data) == 0:
-            return {"error": "数据为空"}
-            
-        # 随机选择一条记录
-        sample = self.data.sample(n=1).iloc[0]
+    def get_single_record(self, file_path: Union[str, Path]) -> Dict:
+        """只读取一条记录样例（第二行数据）"""
+        self.file_path = Path(file_path)
+        self.file_type = self.file_path.suffix.lower()
         
-        # 转换成字典，并确保所有值都是可序列化的
-        sample_dict = {}
-        for col in sample.index:
-            value = sample[col]
-            if pd.isna(value):
-                sample_dict[col] = None
-            elif isinstance(value, (np.int64, np.int32)):
-                sample_dict[col] = int(value)
-            elif isinstance(value, (np.float64, np.float32)):
-                sample_dict[col] = float(value)
-            else:
-                sample_dict[col] = str(value)
+        if not self.file_path.exists():
+            return {"error": "文件不存在"}
+            
+        if not self.is_supported_format(self.file_path):
+            return {"error": f"不支持的文件格式: {self.file_type}"}
+        
+        try:
+            # 根据文件类型选择不同的读取方式
+            if self.file_type == '.csv':
+                # 读取前两行，取第二行
+                sample = pd.read_csv(file_path, nrows=2).iloc[1]
+            elif self.file_type == '.txt':
+                # 尝试不同的分隔符
+                for sep in [',', '\t', '|', ';']:
+                    try:
+                        sample = pd.read_csv(file_path, sep=sep, nrows=2)
+                        if len(sample.columns) > 1:  # 如果成功解析出多列
+                            sample = sample.iloc[1]
+                            break
+                    except:
+                        continue
+            elif self.file_type == '.json':
+                # JSON文件特殊处理：读取第一个非空记录
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and line not in ['[', ']', '{', '}']:
+                            try:
+                                data = json.loads(line)
+                                if isinstance(data, dict):
+                                    sample = pd.Series(data)
+                                elif isinstance(data, list):
+                                    sample = pd.Series(data[0] if data else {})
+                                break
+                            except:
+                                continue
+            elif self.file_type == '.parquet':
+                sample = pq.read_table(file_path, num_rows=2).to_pandas().iloc[1]
+            elif self.file_type in ['.xlsx', '.xls']:
+                sample = pd.read_excel(file_path, nrows=2).iloc[1]
                 
-        return sample_dict
+            if sample is None or len(sample) == 0:
+                return {"error": "文件为空或无法读取数据"}
+                
+            # 转换成值的列表
+            values = []
+            for value in sample:
+                if pd.isna(value):
+                    values.append(None)
+                elif isinstance(value, (np.int64, np.int32)):
+                    values.append(int(value))
+                elif isinstance(value, (np.float64, np.float32)):
+                    values.append(float(value))
+                else:
+                    values.append(str(value))
+                    
+            return {"样例记录": values}
+            
+        except Exception as e:
+            return {"error": f"读取文件失败: {str(e)}"}
 
     def get_summary_stats(self) -> Dict:
         """获取数据质量摘要统计"""
@@ -282,8 +325,8 @@ def show_help():
 参数说明：
     path          要检查的文件或目录路径
     -o, --output  指定输出结果的JSON文件路径
-    -d, --detail  显示详细的检查结果
-    -s, --sample  显示随机样例记录
+    -d, --detail  显示详细的检查结果（不能与-s同时使用）
+    -s, --sample  只显示随机样例记录，不进行数据分析
     -f, --format  使用格式化输出（更易读的文本格式）
     -h, --help    显示此帮助信息
 
@@ -304,7 +347,7 @@ def show_help():
     # 显示详细信息
     python data_quality_check.py data.xlsx -d
 
-    # 显示随机样例记录
+    # 只显示随机样例记录
     python data_quality_check.py data.csv -s
 
     # 使用格式化输出
@@ -313,8 +356,8 @@ def show_help():
     # 保存格式化报告
     python data_quality_check.py data.xlsx -f -o report.txt
 
-    # 组合使用
-    python data_quality_check.py data.xlsx -d -s -f -o report.txt
+    # 组合使用（注意：-s不能与-d同时使用）
+    python data_quality_check.py data.xlsx -f -o report.txt
 """
     print(help_text)
 
@@ -421,23 +464,29 @@ def process_path(path: Union[str, Path], checker: DataQualityChecker, args) -> D
     results = {}
     
     if path.is_file():
-        if checker.load_file(path):
-            result = checker.run_all_checks() if args.detail else checker.get_summary_stats()
-            if args.sample:
-                result["样例记录"] = checker.get_sample_record()
-            results[str(path)] = result
+        if args.sample:
+            # 只读取一条记录
+            results[str(path)] = checker.get_single_record(path)
+        else:
+            # 正常的数据质量检查
+            if checker.load_file(path):
+                result = checker.run_all_checks() if args.detail else checker.get_summary_stats()
+                results[str(path)] = result
     elif path.is_dir():
         # 递归处理目录下的所有支持格式的文件
         for file_path in path.rglob("*"):
             if file_path.is_file() and checker.is_supported_format(file_path):
-                if checker.load_file(file_path):
-                    result = checker.run_all_checks() if args.detail else checker.get_summary_stats()
-                    if args.sample:
-                        result["样例记录"] = checker.get_sample_record()
-                    results[str(file_path)] = result
+                if args.sample:
+                    # 只读取一条记录
+                    results[str(file_path)] = checker.get_single_record(file_path)
+                else:
+                    # 正常的数据质量检查
+                    if checker.load_file(file_path):
+                        result = checker.run_all_checks() if args.detail else checker.get_summary_stats()
+                        results[str(file_path)] = result
         
-        # 如果是目录，添加整体统计信息
-        if results:
+        # 如果不是样例模式，且有结果，添加目录统计
+        if not args.sample and results:
             results["目录统计"] = get_directory_summary(results)
     else:
         logger.error(f"路径不存在: {path}")
@@ -556,8 +605,8 @@ def format_report(results: Dict, is_detail: bool = False) -> str:
             # 样例记录
             if "样例记录" in result:
                 report.append(f"\n📝 随机样例记录")
-                for field, value in result["样例记录"].items():
-                    report.append(f"{field}: {value}")
+                for value in result["样例记录"]:
+                    report.append(f"{value}")
     
     return "\n".join(report)
 
@@ -565,8 +614,8 @@ def main():
     parser = argparse.ArgumentParser(description="数据质量检查工具", add_help=False)
     parser.add_argument('path', nargs='?', help="要检查的文件或目录路径")
     parser.add_argument('--output', '-o', help="输出结果的JSON文件路径")
-    parser.add_argument('--detail', '-d', action='store_true', help="是否显示详细信息")
-    parser.add_argument('--sample', '-s', action='store_true', help="是否显示随机样例记录")
+    parser.add_argument('--detail', '-d', action='store_true', help="是否显示详细信息（不能与-s同时使用）")
+    parser.add_argument('--sample', '-s', action='store_true', help="只显示随机样例记录，不进行数据分析")
     parser.add_argument('--help', '-h', action='store_true', help="显示帮助信息")
     parser.add_argument('--format', '-f', action='store_true', help="是否使用格式化输出")
     
@@ -575,6 +624,11 @@ def main():
     # 显示帮助信息
     if args.help or not args.path:
         show_help()
+        return
+    
+    # 检查参数冲突
+    if args.sample and args.detail:
+        logger.error("参数错误：-s（样例模式）不能与-d（详细模式）同时使用")
         return
     
     # 创建检查器实例
