@@ -20,6 +20,7 @@ import threading
 from queue import Queue
 import time
 import sys
+import psutil
 
 def setup_logging():
     """设置日志配置"""
@@ -458,8 +459,8 @@ def stream_process_json(input_file: str, output_file: str, batch_size: int = 100
         error_log_file = os.path.join(output_dir, f"{base_name}_errors.log")
         unprocessed_file = os.path.join(output_dir, f"{base_name}_unprocessed.json")
         
-        # 第一次扫描：收集字段名（使用采样）
-        logger.info("第一次扫描：收集字段名...")
+        # 第一次扫描：统计总文档数和收集字段名
+        logger.info("第一次扫描：统计总文档数和收集字段名...")
         fieldnames = set()
         sample_count = 0
         sample_interval = 100  # 每100条记录采样一次
@@ -471,16 +472,20 @@ def stream_process_json(input_file: str, output_file: str, batch_size: int = 100
             encoding = result['encoding'] or 'utf-8'
             f.seek(0)
             
+            # 统计总文档数并采样字段
             parser = ijson.items(f, 'item')
             for doc in parser:
                 stats['total_docs'] += 1
-                if stats['total_docs'] % sample_interval == 0:
+                if stats['total_docs'] % sample_interval == 0 and sample_count < 1000:
                     collect_all_fields(doc, fieldnames)
                     sample_count += 1
-                    if sample_count >= 1000:  # 最多采样1000条记录
-                        break
+                    
+                # 显示进度
+                if stats['total_docs'] % 10000 == 0:
+                    logger.info(f"已扫描 {stats['total_docs']} 条记录")
         
-        logger.info(f"字段采样完成，共采样{sample_count}条记录，收集到{len(fieldnames)}个字段")
+        logger.info(f"文件扫描完成，共有 {stats['total_docs']} 条记录")
+        logger.info(f"字段采样完成，共采样 {sample_count} 条记录，收集到 {len(fieldnames)} 个字段")
         
         # 第二次扫描：处理数据并写入CSV
         logger.info("第二次扫描：处理数据并写入CSV...")
@@ -505,7 +510,9 @@ def stream_process_json(input_file: str, output_file: str, batch_size: int = 100
             parser = ijson.items(infile, 'item')
             batch = []
             unprocessed_count = 0
+            stats['processed_docs'] = 0  # 重置处理计数
             
+            # 使用tqdm显示进度，设置总数为实际文档数
             for doc in tqdm(parser, desc="处理进度", total=stats['total_docs']):
                 stats['processed_docs'] += 1
                 processed_doc, error_fields = process_document(doc, fieldnames)
@@ -550,6 +557,10 @@ def stream_process_json(input_file: str, output_file: str, batch_size: int = 100
                 # 定期清理内存
                 if stats['processed_docs'] % 10000 == 0:
                     gc.collect()
+                    # 显示内存使用情况
+                    process = psutil.Process()
+                    memory_info = process.memory_info()
+                    logger.info(f"已处理 {stats['processed_docs']} 条记录，当前内存使用: {memory_info.rss / 1024 / 1024:.2f}MB")
             
             # 写入最后一批数据
             if batch:
@@ -559,7 +570,7 @@ def stream_process_json(input_file: str, output_file: str, batch_size: int = 100
             unprocessed_file.write('\n]')
         
         # 输出统计信息
-        success_rate = (stats['success_docs'] / stats['total_docs']) * 100
+        success_rate = (stats['success_docs'] / stats['total_docs']) * 100 if stats['total_docs'] > 0 else 0
         logger.info(f"\n处理统计:")
         logger.info(f"总文档数: {stats['total_docs']}")
         logger.info(f"成功处理: {stats['success_docs']}")
