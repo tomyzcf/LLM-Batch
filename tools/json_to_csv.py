@@ -174,13 +174,13 @@ def flatten_json(data: Dict[str, Any], parent_key: str = '', sep: str = '_') -> 
             items.append((new_key, v))
     return dict(items)
 
-def collect_all_fields(data: Dict[str, Any], fieldnames: Set[str], prefix: str = '') -> None:
+def collect_all_fields(data: Dict[str, Any], parent_key: str = '', sep: str = '_') -> None:
     """递归收集所有字段名"""
     if not isinstance(data, dict):
         return
         
     for key, value in data.items():
-        field_name = f"{prefix}{key}" if prefix else key
+        field_name = f"{parent_key}{sep}{key}" if parent_key else key
         
         if isinstance(value, dict):
             # 处理嵌套字典
@@ -194,7 +194,7 @@ def collect_all_fields(data: Dict[str, Any], fieldnames: Set[str], prefix: str =
                     if isinstance(sub_value, (str, int, float, bool)) or sub_value is None:
                         fieldnames.add(sub_field)
                     else:
-                        collect_all_fields({sub_key: sub_value}, fieldnames, f"{field_name}_")
+                        collect_all_fields({sub_key: sub_value}, field_name, sep=sep)
         elif isinstance(value, list):
             # 处理列表
             fieldnames.add(field_name)
@@ -205,6 +205,7 @@ def collect_all_fields(data: Dict[str, Any], fieldnames: Set[str], prefix: str =
 def process_document(doc: Dict[str, Any], fieldnames: Set[str]) -> Dict[str, Any]:
     """处理单个文档，提取和清理字段"""
     processed_doc = {}
+    error_fields = []  # 记录处理失败的字段
     
     def clean_text(text: str) -> str:
         """清理文本内容"""
@@ -229,62 +230,71 @@ def process_document(doc: Dict[str, Any], fieldnames: Set[str]) -> Dict[str, Any
     try:
         # 处理所有字段
         for field in fieldnames:
-            if field in doc:
-                value = doc[field]
-                if isinstance(value, dict):
-                    # 处理嵌套字典
-                    if field == '_id' and '$oid' in value:
-                        processed_doc[field] = value['$oid']
-                    elif field == 'fyTree':
-                        # 将法院层级合并为一个字符串
-                        courts = []
-                        for level in ['L1', 'L2', 'L3', 'L4']:
-                            if level in value and value[level]:
-                                courts.append(clean_text(str(value[level])))
-                        processed_doc[field] = ' > '.join(courts) if courts else ''
+            try:
+                if field in doc:
+                    value = doc[field]
+                    if isinstance(value, dict):
+                        # 处理嵌套字典
+                        if field == '_id' and '$oid' in value:
+                            processed_doc[field] = value['$oid']
+                        elif field == 'fyTree':
+                            # 将法院层级合并为一个字符串
+                            courts = []
+                            for level in ['L1', 'L2', 'L3', 'L4']:
+                                if level in value and value[level]:
+                                    courts.append(clean_text(str(value[level])))
+                            processed_doc[field] = ' > '.join(courts) if courts else ''
+                        else:
+                            processed_doc[field] = json.dumps(value, ensure_ascii=False)
+                    elif isinstance(value, list):
+                        # 处理列表
+                        if all(isinstance(x, dict) for x in value):
+                            # 如果列表中都是字典,转换为JSON字符串
+                            processed_doc[field] = json.dumps(value, ensure_ascii=False)
+                        else:
+                            # 否则用分号连接,并确保每个元素都是字符串
+                            processed_doc[field] = ';'.join(clean_text(str(x)) for x in value)
+                    elif isinstance(value, str):
+                        # 处理字符串
+                        # 1. 清理HTML内容
+                        if field == 'qwContent':
+                            value = clean_html(value)
+                        # 2. 清理文本
+                        value = clean_text(value)
+                        # 3. 处理JSON字符串
+                        if field in ['s47', 'wenshuAy'] and value.startswith('['):
+                            try:
+                                data = json.loads(value)
+                                value = json.dumps(data, ensure_ascii=False)
+                            except:
+                                pass
+                        processed_doc[field] = value
                     else:
-                        processed_doc[field] = json.dumps(value, ensure_ascii=False)
-                elif isinstance(value, list):
-                    # 处理列表
-                    if all(isinstance(x, dict) for x in value):
-                        # 如果列表中都是字典,转换为JSON字符串
-                        processed_doc[field] = json.dumps(value, ensure_ascii=False)
-                    else:
-                        # 否则用分号连接,并确保每个元素都是字符串
-                        processed_doc[field] = ';'.join(clean_text(str(x)) for x in value)
-                elif isinstance(value, str):
-                    # 处理字符串
-                    # 1. 清理HTML内容
-                    if field == 'qwContent':
-                        value = clean_html(value)
-                    # 2. 清理文本
-                    value = clean_text(value)
-                    # 3. 处理JSON字符串
-                    if field in ['s47', 'wenshuAy'] and value.startswith('['):
-                        try:
-                            data = json.loads(value)
-                            value = json.dumps(data, ensure_ascii=False)
-                        except:
-                            pass
-                    processed_doc[field] = value
+                        # 处理其他类型(数字、布尔等)
+                        processed_doc[field] = str(value) if value is not None else ''
                 else:
-                    # 处理其他类型(数字、布尔等)
-                    processed_doc[field] = str(value) if value is not None else ''
-            else:
+                    processed_doc[field] = ''
+            except Exception as field_error:
+                error_fields.append((field, str(field_error)))
                 processed_doc[field] = ''
+                continue
         
         # 处理文书正文部分
         for field in ['s22', 's23', 's25', 's26', 's27', 's28']:
-            if field in doc and doc[field] is not None:
-                processed_doc[field] = clean_text(str(doc[field]))
+            try:
+                if field in doc and doc[field] is not None:
+                    processed_doc[field] = clean_text(str(doc[field]))
+            except Exception as field_error:
+                error_fields.append((field, str(field_error)))
+                processed_doc[field] = ''
+                continue
         
     except Exception as e:
         logger.error(f"处理文档时出错: {str(e)}")
         logger.debug(f"问题文档: {json.dumps(doc, ensure_ascii=False)}")
-        # 返回尽可能多的已处理字段
-        return processed_doc
+        error_fields.append(('document_level', str(e)))
     
-    return processed_doc
+    return processed_doc, error_fields
 
 def process_input_file(input_file: str) -> List[Dict]:
     """处理输入文件，包括编码修复和JSON解析"""
@@ -375,10 +385,58 @@ def process_input_file(input_file: str) -> List[Dict]:
     
     return processed_docs
 
+def collect_fields_with_sampling(docs: List[Dict], sample_size: int = 1000) -> Set[str]:
+    """使用采样方式收集字段名
+    
+    Args:
+        docs: 文档列表
+        sample_size: 采样大小，默认1000
+    
+    Returns:
+        Set[str]: 收集到的字段名集合
+    """
+    logger = logging.getLogger(__name__)
+    fieldnames: Set[str] = set()
+    processed_count = 0
+    
+    # 计算采样间隔
+    total_docs = len(docs)
+    if total_docs <= sample_size:
+        step = 1
+    else:
+        step = total_docs // sample_size
+    
+    logger.info(f"开始采样收集字段名，采样间隔: {step}")
+    
+    # 使用集合记录已处理过的字段组合的hash
+    processed_field_combinations = set()
+    
+    for i in range(0, total_docs, step):
+        doc = docs[i]
+        
+        # 获取当前文档的字段组合hash
+        current_fields = frozenset(doc.keys())
+        current_hash = hash(current_fields)
+        
+        # 如果这个字段组合已经处理过，跳过
+        if current_hash in processed_field_combinations:
+            continue
+            
+        processed_field_combinations.add(current_hash)
+        collect_all_fields(doc, fieldnames)
+        processed_count += 1
+            
+        # 定期清理内存
+        if processed_count % 100 == 0:
+            gc.collect()
+            logger.info(f"已处理{processed_count}个样本，当前字段数: {len(fieldnames)}")
+    
+    logger.info(f"字段采样完成，共处理{processed_count}个样本，收集到{len(fieldnames)}个字段")
+    return fieldnames
+
 def json_to_csv(input_file: str, output_file: str, batch_size: int = 1000) -> None:
     """将JSON文件转换为CSV文件"""
     logger = logging.getLogger(__name__)
-    fieldnames: Set[str] = set()
     
     try:
         # 确保输出目录存在
@@ -397,18 +455,34 @@ def json_to_csv(input_file: str, output_file: str, batch_size: int = 1000) -> No
         doc_count = len(all_docs)
         logger.info(f"成功读取 {doc_count} 个有效文档")
         
-        # 收集字段名
-        for doc in tqdm(all_docs, desc="收集字段名"):
-            collect_all_fields(doc, fieldnames)
-            # 定期清理内存
-            if all_docs.index(doc) % 1000 == 0:
-                gc.collect()
+        # 使用采样方式收集字段名
+        fieldnames = collect_fields_with_sampling(all_docs)
         
         logger.info(f"找到 {len(fieldnames)} 个字段")
         
+        # 准备统计信息
+        stats = {
+            'total_docs': doc_count,
+            'processed_docs': 0,
+            'success_docs': 0,
+            'failed_docs': 0,
+            'field_errors': {}
+        }
+        
+        # 准备错误日志和未处理文档文件
+        base_name = os.path.splitext(os.path.basename(output_file))[0]
+        error_log_file = os.path.join(output_dir, f"{base_name}_errors.log")
+        unprocessed_file = os.path.join(output_dir, f"{base_name}_unprocessed.json")
+        
         # 写入CSV
         logger.info("开始写入CSV...")
-        with open(output_file, 'w', encoding='utf-8-sig', newline='') as csvfile:
+        with open(output_file, 'w', encoding='utf-8-sig', newline='') as csvfile, \
+             open(error_log_file, 'w', encoding='utf-8') as error_file, \
+             open(unprocessed_file, 'w', encoding='utf-8') as unprocessed_file:
+            
+            # 写入未处理文件的头部
+            unprocessed_file.write('[\n')
+            
             writer = csv.writer(
                 csvfile,
                 quoting=csv.QUOTE_ALL,
@@ -418,8 +492,35 @@ def json_to_csv(input_file: str, output_file: str, batch_size: int = 1000) -> No
             writer.writerow(list(fieldnames))
             
             # 写入数据
-            for doc in tqdm(all_docs, desc="写入CSV"):
-                processed_doc = process_document(doc, fieldnames)
+            unprocessed_count = 0
+            for doc_index, doc in enumerate(tqdm(all_docs, desc="写入CSV")):
+                stats['processed_docs'] += 1
+                processed_doc, error_fields = process_document(doc, fieldnames)
+                
+                # 记录错误信息和未处理的文档
+                if error_fields:
+                    stats['failed_docs'] += 1
+                    # 记录错误日志
+                    error_entry = {
+                        'doc_index': doc_index,
+                        'errors': error_fields,
+                        'original_doc': doc
+                    }
+                    error_file.write(json.dumps(error_entry, ensure_ascii=False) + '\n')
+                    
+                    # 写入未处理文档（保持JSON格式）
+                    if unprocessed_count > 0:
+                        unprocessed_file.write(',\n')
+                    unprocessed_file.write(json.dumps(doc, ensure_ascii=False, indent=2))
+                    unprocessed_count += 1
+                    
+                    # 更新字段错误统计
+                    for field, error in error_fields:
+                        stats['field_errors'][field] = stats['field_errors'].get(field, 0) + 1
+                else:
+                    stats['success_docs'] += 1
+                
+                # 写入处理后的文档到CSV
                 row = []
                 for field in fieldnames:
                     value = processed_doc.get(field, '')
@@ -429,11 +530,29 @@ def json_to_csv(input_file: str, output_file: str, batch_size: int = 1000) -> No
                 writer.writerow(row)
                 
                 # 定期清理内存
-                if all_docs.index(doc) % 1000 == 0:
+                if doc_index % 1000 == 0:
                     gc.collect()
+            
+            # 写入未处理文件的尾部
+            unprocessed_file.write('\n]')
         
-        logger.info(f"成功处理完成，共写入 {doc_count} 个文档")
-    
+        # 输出统计信息
+        success_rate = (stats['success_docs'] / stats['total_docs']) * 100
+        logger.info(f"\n处理统计:")
+        logger.info(f"总文档数: {stats['total_docs']}")
+        logger.info(f"成功处理: {stats['success_docs']}")
+        logger.info(f"处理失败: {stats['failed_docs']}")
+        logger.info(f"成功率: {success_rate:.2f}%")
+        
+        if stats['field_errors']:
+            logger.info("\n字段错误统计:")
+            for field, count in sorted(stats['field_errors'].items(), key=lambda x: x[1], reverse=True):
+                logger.info(f"{field}: {count}次错误")
+        
+        logger.info(f"\n错误详细信息已保存至: {error_log_file}")
+        if unprocessed_count > 0:
+            logger.info(f"未处理成功的原始文档已保存至: {unprocessed_file}")
+        
     except Exception as e:
         logger.error(f"处理文件时出错: {str(e)}")
         raise
@@ -552,6 +671,86 @@ def aggressive_fix_json(content):
         content = '[' + content + ']'
     
     return content
+
+def process_large_json_file(input_file: str, output_file: str, batch_size: int = 10000):
+    """优化的大文件处理函数"""
+    logger = logging.getLogger(__name__)
+    
+    # 创建输出目录
+    output_dir = os.path.dirname(output_file)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    try:
+        logger.info(f"开始处理文件: {input_file}")
+        doc_count = 0
+        
+        # 获取文件大小用于进度显示
+        file_size = os.path.getsize(input_file)
+        
+        # 使用ijson流式解析JSON
+        with open(input_file, 'rb') as infile, \
+             open(output_file, 'w', encoding='utf-8-sig', newline='') as outfile, \
+             tqdm(total=file_size, unit='B', unit_scale=True, desc="读取进度") as pbar:
+            
+            # 使用ijson流式解析
+            parser = ijson.parse(infile)
+            buffer = b''
+            
+            def iter_with_progress():
+                nonlocal buffer
+                while True:
+                    chunk = infile.read(8192)  # 8KB chunks
+                    if not chunk:
+                        break
+                    buffer += chunk
+                    pbar.update(len(chunk))
+                    yield chunk
+            
+            # 使用带进度条的解析器
+            parser = ijson.items(iter_with_progress(), 'item')
+            
+            # 获取第一条记录来初始化CSV writer
+            try:
+                first_record = next(parser)
+                fieldnames = list(first_record.keys())
+                writer = csv.DictWriter(
+                    outfile,
+                    fieldnames=fieldnames,
+                    quoting=csv.QUOTE_ALL,
+                    escapechar='\\',
+                    doublequote=True
+                )
+                writer.writeheader()
+                writer.writerow(first_record)
+                doc_count += 1
+            except StopIteration:
+                logger.error("文件为空或格式错误")
+                return
+            
+            # 处理剩余记录
+            batch = []
+            for obj in tqdm(parser, desc="处理进度"):
+                batch.append(obj)
+                doc_count += 1
+                
+                if len(batch) >= batch_size:
+                    writer.writerows(batch)
+                    batch = []
+                    
+                    if doc_count % 50000 == 0:
+                        logger.info(f"已处理 {doc_count} 条记录")
+                        gc.collect()
+            
+            # 写入最后一批数据
+            if batch:
+                writer.writerows(batch)
+        
+        logger.info(f"处理完成，共处理 {doc_count} 条记录")
+        
+    except Exception as e:
+        logger.error(f"处理文件时出错: {str(e)}")
+        raise
 
 def main():
     parser = argparse.ArgumentParser(description='将JSON文件转换为CSV格式')

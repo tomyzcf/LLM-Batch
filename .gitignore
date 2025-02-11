@@ -33,6 +33,7 @@ ENV/
 
 # Project specific
 logs/
+inputData/
 inputData/*
 outputData/*
 !inputData/.gitkeep

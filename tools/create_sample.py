@@ -8,6 +8,7 @@ import logging
 from typing import Dict, Any, List
 import mmap
 import os
+from tqdm import tqdm
 
 def setup_logging():
     """设置日志配置"""
@@ -37,57 +38,61 @@ def flatten_json(obj: Dict[str, Any], parent_key: str = '', sep: str = '.') -> D
             items[new_key] = v
     return items
 
-def find_json_objects(mm: mmap.mmap, sample_size: int) -> List[Dict[str, Any]]:
+def find_json_objects(mm: mmap.mmap, sample_size: int, file_size: int) -> List[Dict[str, Any]]:
     """使用内存映射快速查找JSON对象"""
     objects = []
     start = 0
     
-    while len(objects) < sample_size:
-        # 查找下一个对象开始
-        while start < len(mm):
-            if chr(mm[start]) == '{':
+    with tqdm(total=file_size, desc="处理进度", unit='B', unit_scale=True) as pbar:
+        while len(objects) < sample_size:
+            last_pos = start
+            # 查找下一个对象开始
+            while start < len(mm):
+                if chr(mm[start]) == '{':
+                    break
+                start += 1
+                
+            if start >= len(mm):
+                pbar.update(start - last_pos)
                 break
-            start += 1
+                
+            # 解析JSON对象
+            brace_count = 0
+            pos = start
+            in_string = False
+            escape = False
             
-        if start >= len(mm):
-            break
-            
-        # 解析JSON对象
-        brace_count = 0
-        pos = start
-        in_string = False
-        escape = False
-        
-        while pos < len(mm):
-            char = chr(mm[pos])
-            
-            if not in_string:
-                if char == '{':
-                    brace_count += 1
-                elif char == '}':
-                    brace_count -= 1
-                    if brace_count == 0:
-                        # 找到完整的JSON对象
-                        try:
-                            json_str = mm[start:pos+1].decode('utf-8', errors='ignore')
-                            json_obj = json.loads(json_str)
-                            objects.append(json_obj)
-                            break
-                        except:
-                            pass
-                elif char == '"':
-                    in_string = True
-            else:
-                if char == '\\':
-                    escape = not escape
-                elif char == '"' and not escape:
-                    in_string = False
+            while pos < len(mm):
+                char = chr(mm[pos])
+                
+                if not in_string:
+                    if char == '{':
+                        brace_count += 1
+                    elif char == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            # 找到完整的JSON对象
+                            try:
+                                json_str = mm[start:pos+1].decode('utf-8', errors='ignore')
+                                json_obj = json.loads(json_str)
+                                objects.append(json_obj)
+                                break
+                            except:
+                                pass
+                    elif char == '"':
+                        in_string = True
                 else:
-                    escape = False
-                    
-            pos += 1
+                    if char == '\\':
+                        escape = not escape
+                    elif char == '"' and not escape:
+                        in_string = False
+                    else:
+                        escape = False
+                        
+                pos += 1
             
-        start = pos + 1
+            pbar.update(pos - last_pos)
+            start = pos + 1
         
     return objects
 
@@ -96,22 +101,28 @@ def create_sample(input_file: str, output_file: str, sample_size: int = 1):
     logger = setup_logging()
     logger.info(f"开始从 {input_file} 创建样本文件")
     
+    file_size = os.path.getsize(input_file)
+    
     # 使用内存映射读取文件
     with open(input_file, 'rb') as f:
         mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
         
         try:
             # 查找JSON对象
-            sample_objects = find_json_objects(mm, sample_size)
+            sample_objects = find_json_objects(mm, sample_size, file_size)
             
             if not sample_objects:
                 logger.error("未能找到有效的JSON对象")
                 return
-                
+            
+            logger.info("开始拉平JSON对象...")
             # 拉平JSON对象
-            flattened_objects = [flatten_json(obj) for obj in sample_objects]
+            flattened_objects = []
+            for obj in tqdm(sample_objects, desc="拉平进度"):
+                flattened_objects.append(flatten_json(obj))
             
             # 写入结果
+            logger.info("写入结果文件...")
             with open(output_file, 'w', encoding='utf-8') as out:
                 if len(flattened_objects) == 1:
                     json.dump(flattened_objects[0], out, ensure_ascii=False, indent=2)
