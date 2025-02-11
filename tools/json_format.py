@@ -5,10 +5,17 @@ import json
 import sys
 from pathlib import Path
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Generator
 import mmap
 import os
 from tqdm import tqdm
+import psutil
+import gc
+
+def get_memory_usage():
+    """获取当前进程的内存使用情况"""
+    process = psutil.Process(os.getpid())
+    return process.memory_info().rss / 1024 / 1024  # 转换为MB
 
 def setup_logging():
     """设置日志配置"""
@@ -39,90 +46,93 @@ def flatten_json(obj: Dict[str, Any], parent_key: str = '', sep: str = '.') -> D
             else:
                 items.update(flatten_json(v, new_key))
         elif isinstance(v, list):
-            # 处理列表中的字典对象
-            if all(isinstance(x, dict) for x in v):
-                array_values = []
-                for i, item in enumerate(v):
-                    # 为每个字典创建一个临时键
-                    temp_dict = {}
-                    for sub_k, sub_v in item.items():
-                        temp_key = f"{new_key}_{i}.{sub_k}"
-                        temp_dict[temp_key] = sub_v
-                    # 递归处理字典
-                    flattened = flatten_json(temp_dict)
-                    # 将展平后的键值对转换为字符串
-                    item_str = ','.join(f'{k}-"{str(v)}"' for k, v in flattened.items())
-                    array_values.append(item_str)
-                items[new_key] = '|'.join(array_values)
-            elif all(isinstance(x, (str, int, float, bool)) for x in v):
-                items[new_key] = '|'.join(str(x) for x in v)
-            else:
-                items[new_key] = json.dumps(v, ensure_ascii=False)
+            if v:  # 只在列表非空时处理
+                if all(isinstance(x, dict) for x in v):
+                    array_values = []
+                    for i, item in enumerate(v):
+                        temp_dict = {f"{new_key}_{i}.{sub_k}": sub_v 
+                                   for sub_k, sub_v in item.items()}
+                        flattened = flatten_json(temp_dict)
+                        item_str = ','.join(f'{k}-"{str(v)}"' for k, v in flattened.items())
+                        array_values.append(item_str)
+                    items[new_key] = '|'.join(array_values)
+                elif all(isinstance(x, (str, int, float, bool)) for x in v):
+                    items[new_key] = '|'.join(str(x) for x in v)
+                else:
+                    items[new_key] = json.dumps(v, ensure_ascii=False)
         else:
             items[new_key] = v
             
     return items
 
-def find_json_objects(mm: mmap.mmap, sample_size: int, file_size: int) -> List[Dict[str, Any]]:
-    """使用内存映射快速查找JSON对象"""
-    objects = []
+def find_json_objects(mm: mmap.mmap, file_size: int) -> Generator[Dict[str, Any], None, None]:
+    """使用生成器模式逐个产出JSON对象"""
     start = 0
+    logger = logging.getLogger(__name__)
     
     with tqdm(total=file_size, desc="处理进度", unit='B', unit_scale=True) as pbar:
-        while len(objects) < sample_size:
-            last_pos = start
-            # 查找下一个对象开始
-            while start < len(mm):
-                if chr(mm[start]) == '{':
+        while start < len(mm):
+            try:
+                # 查找下一个对象开始
+                while start < len(mm):
+                    if chr(mm[start]) == '{':
+                        break
+                    start += 1
+                    
+                if start >= len(mm):
                     break
-                start += 1
+                    
+                # 解析JSON对象
+                brace_count = 0
+                pos = start
+                in_string = False
+                escape = False
                 
-            if start >= len(mm):
-                pbar.update(start - last_pos)
-                break
-                
-            # 解析JSON对象
-            brace_count = 0
-            pos = start
-            in_string = False
-            escape = False
-            
-            while pos < len(mm):
-                char = chr(mm[pos])
-                
-                if not in_string:
-                    if char == '{':
-                        brace_count += 1
-                    elif char == '}':
-                        brace_count -= 1
-                        if brace_count == 0:
-                            # 找到完整的JSON对象
-                            try:
-                                json_str = mm[start:pos+1].decode('utf-8', errors='ignore')
-                                json_obj = json.loads(json_str)
-                                objects.append(json_obj)
-                                break
-                            except:
-                                pass
-                    elif char == '"':
-                        in_string = True
-                else:
-                    if char == '\\':
-                        escape = not escape
-                    elif char == '"' and not escape:
-                        in_string = False
+                while pos < len(mm):
+                    char = chr(mm[pos])
+                    
+                    if not in_string:
+                        if char == '{':
+                            brace_count += 1
+                        elif char == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                try:
+                                    json_str = mm[start:pos+1].decode('utf-8', errors='ignore')
+                                    json_obj = json.loads(json_str)
+                                    yield json_obj
+                                    break
+                                except json.JSONDecodeError:
+                                    logger.warning(f"JSON解析错误，位置: {start}-{pos+1}")
+                                except Exception as e:
+                                    logger.warning(f"处理错误: {str(e)}")
+                        elif char == '"':
+                            in_string = True
                     else:
-                        escape = False
-                        
-                pos += 1
-            
-            pbar.update(pos - last_pos)
-            start = pos + 1
-        
-    return objects
+                        if char == '\\':
+                            escape = not escape
+                        elif char == '"' and not escape:
+                            in_string = False
+                        else:
+                            escape = False
+                            
+                    pos += 1
+                
+                pbar.update(pos - start)
+                start = pos + 1
+                
+                # 定期进行垃圾回收
+                if start % (10 * 1024 * 1024) == 0:  # 每10MB检查一次
+                    gc.collect()
+                    current_memory = get_memory_usage()
+                    logger.debug(f"当前内存使用: {current_memory:.2f}MB")
+                    
+            except Exception as e:
+                logger.error(f"处理过程中出错: {str(e)}")
+                start += 1
 
-def create_sample(input_file: str, output_file: str, sample_size: int = 1):
-    """从大文件中提取指定数量的JSON对象创建样本文件"""
+def create_sample(input_file: str, output_file: str, sample_size: int = 1, batch_size: int = 100):
+    """分批处理JSON对象并创建样本文件"""
     logger = setup_logging()
     logger.info(f"开始从 {input_file} 创建样本文件")
     
@@ -133,39 +143,46 @@ def create_sample(input_file: str, output_file: str, sample_size: int = 1):
         mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
         
         try:
-            # 查找JSON对象
-            sample_objects = find_json_objects(mm, sample_size, file_size)
-            
-            if not sample_objects:
-                logger.error("未能找到有效的JSON对象")
-                return
-            
-            logger.info("开始拉平JSON对象...")
-            # 拉平JSON对象
-            flattened_objects = []
-            for obj in tqdm(sample_objects, desc="拉平进度"):
-                flattened_objects.append(flatten_json(obj))
-            
-            # 写入结果
-            logger.info("写入结果文件...")
+            # 创建输出文件
             with open(output_file, 'w', encoding='utf-8') as out:
-                if len(flattened_objects) == 1:
-                    json.dump(flattened_objects[0], out, ensure_ascii=False, indent=2)
-                else:
-                    json.dump(flattened_objects, out, ensure_ascii=False, indent=2)
+                out.write('[\n')  # 开始JSON数组
+                
+                # 使用生成器逐个处理对象
+                processed_count = 0
+                for obj in find_json_objects(mm, file_size):
+                    if processed_count >= sample_size:
+                        break
+                        
+                    flattened_obj = flatten_json(obj)
                     
-            logger.info(f"成功创建样本文件: {output_file}，包含 {len(flattened_objects)} 个对象")
+                    # 写入对象
+                    if processed_count > 0:
+                        out.write(',\n')
+                    json.dump(flattened_obj, out, ensure_ascii=False, indent=2)
+                    
+                    processed_count += 1
+                    
+                    # 定期清理内存
+                    if processed_count % batch_size == 0:
+                        gc.collect()
+                        current_memory = get_memory_usage()
+                        logger.info(f"已处理 {processed_count} 个对象，当前内存使用: {current_memory:.2f}MB")
+                
+                out.write('\n]')  # 结束JSON数组
+                    
+            logger.info(f"成功创建样本文件: {output_file}，包含 {processed_count} 个对象")
             
         finally:
             mm.close()
 
 if __name__ == '__main__':
     if len(sys.argv) < 3:
-        print("用法: python json_format.py <input_file> <output_file> [sample_size]")
+        print("用法: python json_format.py <input_file> <output_file> [sample_size] [batch_size]")
         sys.exit(1)
         
     input_file = sys.argv[1]
     output_file = sys.argv[2]
     sample_size = int(sys.argv[3]) if len(sys.argv) > 3 else 1
+    batch_size = int(sys.argv[4]) if len(sys.argv) > 4 else 5000
     
-    create_sample(input_file, output_file, sample_size)
+    create_sample(input_file, output_file, sample_size, batch_size)
