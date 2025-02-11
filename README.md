@@ -167,4 +167,27 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ### Data Quality Check
 
 A standalone tool for checking data quality of various file formats (CSV, Excel, JSON, Parquet, etc.). 
-Run `python tools/data_quality_check.py --help` for detailed usage information. 
+Run `python tools/data_quality_check.py --help` for detailed usage information.
+
+### CSV Splitter Manager
+
+A powerful CSV file splitting and management tool that supports various splitting methods:
+- Split by number of rows
+- Split by file size (MB)
+- Split by percentage (e.g., 60%/40%)
+- Split by date column (monthly)
+- Split by column values
+- Random splitting
+- Column management (deletion)
+
+Run `python tools/csv_splitter_manager.py --help` for detailed usage information.
+
+### JSON Format Tool
+
+A tool for processing and formatting JSON files with support for nested structures and batch processing.
+Run `python tools/json_format.py --help` for detailed usage information.
+
+### JSON to CSV Converter
+
+A tool for converting JSON data to CSV format with support for flattening complex structures and custom field mapping.
+Run `python tools/json_to_csv.py --help` for detailed usage information. 

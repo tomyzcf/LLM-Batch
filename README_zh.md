@@ -167,4 +167,27 @@ python main.py input.csv prompt.txt --provider openai
 ### 数据质量检查
 
 独立的数据质量检查工具，支持多种文件格式（CSV、Excel、JSON、Parquet等）的数据质量检查。
-运行 `python tools/data_quality_check.py --help` 获取详细使用说明。 
+运行 `python tools/data_quality_check.py --help` 获取详细使用说明。
+
+### CSV分割管理器
+
+功能强大的CSV文件分割和管理工具，支持多种分割方式：
+- 按行数分割
+- 按文件大小分割（MB）
+- 按百分比分割（如60%/40%）
+- 按日期列分割（按月）
+- 按列值分割
+- 随机分割
+- 列管理（删除）
+
+运行 `python tools/csv_splitter_manager.py --help` 获取详细使用说明。
+
+### JSON格式化工具
+
+用于处理和格式化JSON文件的工具，支持嵌套结构处理和批量处理。
+运行 `python tools/json_format.py --help` 获取详细使用说明。
+
+### JSON转CSV工具
+
+将JSON格式数据转换为CSV格式的工具，支持复杂结构扁平化和自定义字段映射。
+运行 `python tools/json_to_csv.py --help` 获取详细使用说明。 
