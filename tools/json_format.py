@@ -21,21 +21,46 @@ def setup_logging():
 def flatten_json(obj: Dict[str, Any], parent_key: str = '', sep: str = '.') -> Dict[str, Any]:
     """将嵌套的JSON对象拉平为单层结构"""
     items = {}
+    
     for k, v in obj.items():
         new_key = f"{parent_key}{sep}{k}" if parent_key else k
         
         if isinstance(v, dict):
-            items.update(flatten_json(v, new_key))
+            # 检查是否是数字序列键的字典
+            is_numbered_keys = all(k[-1].isdigit() for k in v.keys() if k)
+            if is_numbered_keys:
+                array_values = []
+                # 按数字排序键
+                sorted_keys = sorted(v.keys(), key=lambda x: int(''.join(filter(str.isdigit, x))))
+                for sub_k in sorted_keys:
+                    full_key = f"{new_key}.{sub_k}"
+                    array_values.append(f'{full_key}-"{str(v[sub_k])}"')
+                items[new_key] = ','.join(array_values)
+            else:
+                items.update(flatten_json(v, new_key))
         elif isinstance(v, list):
-            if all(isinstance(x, (str, int, float, bool)) for x in v):
-                items[new_key] = '|'.join(str(x) for x in v)
-            elif all(isinstance(x, dict) for x in v):
+            # 处理列表中的字典对象
+            if all(isinstance(x, dict) for x in v):
+                array_values = []
                 for i, item in enumerate(v):
-                    items.update(flatten_json(item, f"{new_key}_{i}"))
+                    # 为每个字典创建一个临时键
+                    temp_dict = {}
+                    for sub_k, sub_v in item.items():
+                        temp_key = f"{new_key}_{i}.{sub_k}"
+                        temp_dict[temp_key] = sub_v
+                    # 递归处理字典
+                    flattened = flatten_json(temp_dict)
+                    # 将展平后的键值对转换为字符串
+                    item_str = ','.join(f'{k}-"{str(v)}"' for k, v in flattened.items())
+                    array_values.append(item_str)
+                items[new_key] = '|'.join(array_values)
+            elif all(isinstance(x, (str, int, float, bool)) for x in v):
+                items[new_key] = '|'.join(str(x) for x in v)
             else:
                 items[new_key] = json.dumps(v, ensure_ascii=False)
         else:
             items[new_key] = v
+            
     return items
 
 def find_json_objects(mm: mmap.mmap, sample_size: int, file_size: int) -> List[Dict[str, Any]]:
@@ -136,7 +161,7 @@ def create_sample(input_file: str, output_file: str, sample_size: int = 1):
 
 if __name__ == '__main__':
     if len(sys.argv) < 3:
-        print("用法: python create_sample.py <input_file> <output_file> [sample_size]")
+        print("用法: python json_format.py <input_file> <output_file> [sample_size]")
         sys.exit(1)
         
     input_file = sys.argv[1]

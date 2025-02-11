@@ -174,7 +174,7 @@ def flatten_json(data: Dict[str, Any], parent_key: str = '', sep: str = '_') -> 
             items.append((new_key, v))
     return dict(items)
 
-def collect_all_fields(data: Dict[str, Any], parent_key: str = '', sep: str = '_') -> None:
+def collect_all_fields(data: Dict[str, Any], fieldnames: Set[str], parent_key: str = '', sep: str = '_') -> None:
     """递归收集所有字段名"""
     if not isinstance(data, dict):
         return
@@ -194,7 +194,7 @@ def collect_all_fields(data: Dict[str, Any], parent_key: str = '', sep: str = '_
                     if isinstance(sub_value, (str, int, float, bool)) or sub_value is None:
                         fieldnames.add(sub_field)
                     else:
-                        collect_all_fields({sub_key: sub_value}, field_name, sep=sep)
+                        collect_all_fields({sub_key: sub_value}, fieldnames, field_name, sep=sep)
         elif isinstance(value, list):
             # 处理列表
             fieldnames.add(field_name)
