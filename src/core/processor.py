@@ -63,7 +63,19 @@ class BatchProcessor:
     ):
         """处理单个文件"""
         # 设置输出文件路径
-        rel_path = file_path.relative_to(Path('inputData'))
+        try:
+            # 尝试获取相对于 inputData 的相对路径
+            rel_path = file_path.relative_to(Path('inputData'))
+        except ValueError:
+            # 如果失败，尝试从绝对路径中提取相对路径部分
+            parts = file_path.parts
+            if 'inputData' in parts:
+                idx = parts.index('inputData')
+                rel_path = Path(*parts[idx + 1:])
+            else:
+                # 如果路径中没有 inputData，使用文件名作为相对路径
+                rel_path = Path(file_path.name)
+        
         base_name = rel_path.stem
         output_dir = Path('outputData')
         if rel_path.parent != Path('.'):
@@ -117,6 +129,9 @@ class BatchProcessor:
                 with open(progress_file, 'r', encoding='utf-8') as f:
                     progress_data = json.load(f)
                     current_pos = max(current_pos, progress_data.get('last_position', current_pos))
+                    # 加载之前的统计数据
+                    if 'stats' in progress_data:
+                        stats = progress_data['stats']
                     Logger.info(f"从上次的进度继续处理: 第 {current_pos + 1} 行")
             except Exception as e:
                 Logger.error(f"读取进度文件失败: {str(e)}")
@@ -128,15 +143,16 @@ class BatchProcessor:
         Logger.info(f"处理范围: 第 {current_pos + 1} 行 到 {end_pos if end_pos else '文件末尾'}")
         Logger.info(f"剩余行数: {remaining_lines}")
         
-        # 统计信息
-        stats = {
-            'total': 0,
-            'success': 0,
-            'api_error': 0,
-            'empty_result': 0,
-            'json_error': 0,
-            'other_error': 0
-        }
+        # 如果没有之前的统计信息，初始化统计信息
+        if not stats:
+            stats = {
+                'total': 0,
+                'success': 0,
+                'api_error': 0,
+                'empty_result': 0,
+                'json_error': 0,
+                'other_error': 0
+            }
         
         # 批次计数器
         batch_count = 0
@@ -209,40 +225,8 @@ class BatchProcessor:
                                     json.dump(error_data, f, ensure_ascii=False)
                                     f.write('\n')
                                     
-                        elif result is None:
-                            stats['empty_result'] += 1
-                            Logger.error("处理返回空结果")
-                            
-                            if file_path.suffix.lower() == '.csv':
-                                with open(error_file, 'a', encoding='utf-8') as f:
-                                    f.write(f"{item['content']},空结果\n")
-                            else:
-                                error_data = json.loads(item['content'])
-                                error_data['error_type'] = '空结果'
-                                with open(error_file, 'a', encoding='utf-8') as f:
-                                    json.dump(error_data, f, ensure_ascii=False)
-                                    f.write('\n')
-                            
-                            with open(raw_file, 'a', encoding='utf-8') as f:
-                                json.dump(result, f, ensure_ascii=False)
-                                f.write('\n')
-                        else:
+                        elif isinstance(result, dict):  # 如果结果已经是字典，直接处理
                             try:
-                                # 预处理JSON字符串，使用正则表达式处理未加引号的特殊值
-                                if isinstance(result, str):
-                                    import re
-                                    # 1. 提取JSON内容（去除所有非JSON文本）
-                                    result = re.sub(r'^[^{]*({.*})[^}]*$', r'\1', result.strip())
-                                    
-                                    # 2. 处理特殊值
-                                    result = re.sub(r':\s*(无相关内容|NA)\s*(?=,|\n|\s*})', r': "\1"', result)
-                                    
-                                    # 3. 确保数字字段不带引号
-                                    result = re.sub(r'"(判决依据条款数目|判断案件受理费金额)":\s*"(\d+)"', r'"\1": \2', result)
-                                    
-                                    # 尝试解析JSON
-                                    result = json.loads(result)
-                                
                                 stats['success'] += 1
                                 with open(raw_file, 'a', encoding='utf-8') as f:
                                     json.dump(result, f, ensure_ascii=False)
@@ -266,11 +250,49 @@ class BatchProcessor:
                                 with open(output_file, 'a', encoding='utf-8-sig', newline='') as f:
                                     writer = csv.DictWriter(f, fieldnames=output_headers)
                                     writer.writerow(result)
-                            except json.JSONDecodeError as e:
+                            except Exception as e:
+                                stats['other_error'] += 1
+                                Logger.error(f"处理结果时出错: {str(e)}")
+                                if file_path.suffix.lower() == '.csv':
+                                    with open(error_file, 'a', encoding='utf-8') as f:
+                                        f.write(f"{item['content']},处理错误\n")
+                                else:
+                                    error_data = json.loads(item['content'])
+                                    error_data['error_type'] = '处理错误'
+                                    with open(error_file, 'a', encoding='utf-8') as f:
+                                        json.dump(error_data, f, ensure_ascii=False)
+                                        f.write('\n')
+                        else:  # 处理非字典类型的结果
+                            try:
+                                # 尝试解析JSON字符串
+                                if isinstance(result, str):
+                                    try:
+                                        result_dict = json.loads(result)
+                                        if isinstance(result_dict, list):
+                                            result_dict = result_dict[0] if result_dict else {}
+                                        if isinstance(result_dict, dict):
+                                            stats['success'] += 1
+                                            with open(raw_file, 'a', encoding='utf-8') as f:
+                                                json.dump(result_dict, f, ensure_ascii=False)
+                                                f.write('\n')
+                                            
+                                            if output_headers is None and result_dict:
+                                                output_headers = list(result_dict.keys())
+                                                if not output_file.exists():
+                                                    with open(output_file, 'w', encoding='utf-8-sig', newline='') as f:
+                                                        writer = csv.DictWriter(f, fieldnames=output_headers)
+                                                        writer.writeheader()
+                                            
+                                            with open(output_file, 'a', encoding='utf-8-sig', newline='') as f:
+                                                writer = csv.DictWriter(f, fieldnames=output_headers)
+                                                writer.writerow(result_dict)
+                                            continue
+                                    except json.JSONDecodeError:
+                                        pass
+                                
+                                # 如果不是有效的JSON或字典，记录为错误
                                 stats['json_error'] += 1
                                 Logger.error(f"JSON解析失败: {result}")
-                                Logger.error(f"错误详情: {str(e)}")
-                                
                                 if file_path.suffix.lower() == '.csv':
                                     with open(error_file, 'a', encoding='utf-8') as f:
                                         f.write(f"{item['content']},JSON解析错误\n")
@@ -280,32 +302,38 @@ class BatchProcessor:
                                     with open(error_file, 'a', encoding='utf-8') as f:
                                         json.dump(error_data, f, ensure_ascii=False)
                                         f.write('\n')
+                            except Exception as e:
+                                stats['other_error'] += 1
+                                Logger.error(f"处理结果时出错: {str(e)}")
+                                if file_path.suffix.lower() == '.csv':
+                                    with open(error_file, 'a', encoding='utf-8') as f:
+                                        f.write(f"{item['content']},处理错误\n")
+                                else:
+                                    error_data = json.loads(item['content'])
+                                    error_data['error_type'] = '处理错误'
+                                    with open(error_file, 'a', encoding='utf-8') as f:
+                                        json.dump(error_data, f, ensure_ascii=False)
+                                        f.write('\n')
                     
-                    # 更新进度条
+                    # 更新进度
+                    current_pos += len(items)
                     if pbar:
                         pbar.update(len(items))
                     
-                    # 更新批次计数
-                    batch_count += 1
-                    
-                    # 保存进度
-                    current_pos += len(items)
+                    # 每批次处理完成后更新进度文件
+                    progress_data = {
+                        'last_position': current_pos,
+                        'last_update': datetime.datetime.now().isoformat(),
+                        'stats': stats
+                    }
                     with open(progress_file, 'w', encoding='utf-8') as f:
-                        json.dump({
-                            'last_position': current_pos,
-                            'last_update': datetime.datetime.now().isoformat(),
-                            'stats': stats
-                        }, f, ensure_ascii=False, indent=2)
+                        json.dump(progress_data, f, ensure_ascii=False, indent=2)
                     
-                    # 定期输出统计信息
-                    if Logger.should_show_stats(batch_count):
-                        Logger.info(f"\n当前处理统计:\n" + 
-                                  f"总处理: {stats['total']}\n" +
-                                  f"成功: {stats['success']}\n" +
-                                  f"API错误: {stats['api_error']}\n" +
-                                  f"空结果: {stats['empty_result']}\n" +
-                                  f"JSON解析错误: {stats['json_error']}\n" +
-                                  f"其他错误: {stats['other_error']}")
+                    # 每处理1000条记录输出一次统计信息
+                    batch_count += len(items)
+                    if batch_count >= 1000:
+                        batch_count = 0
+                        Logger.info(f"\n当前处理统计:\n总处理: {stats['total']}\n成功: {stats['success']}\nAPI错误: {stats['api_error']}\n空结果: {stats['empty_result']}\nJSON解析错误: {stats['json_error']}\n其他错误: {stats['other_error']}")
             finally:
                 if pbar:
                     pbar.close()
