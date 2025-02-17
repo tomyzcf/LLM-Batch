@@ -11,30 +11,44 @@ import random
 from datetime import datetime
 import psutil
 import gc
+from typing import List
 
 # 性能优化配置
 MEMORY_CHECK_INTERVAL = 100 * 1024 * 1024  # 每处理100MB检查一次内存
 MEMORY_THRESHOLD = 80  # 内存使用率警告阈值（百分数）
 BATCH_SIZE = 10000  # 默认批处理大小
 BUFFER_SIZE = 8192 * 1024  # 8MB文件缓冲区大小
-GC_INTERVAL = 50 * 1024 * 1024  # 每处理50MB执行一次GC
+ENCODING = 'utf-8-sig'  # 统一使用的编码
 
 def get_memory_usage():
     """获取当前进程的内存使用情况"""
     process = psutil.Process(os.getpid())
     memory_info = process.memory_info()
-    # 获取系统总内存
     total_memory = psutil.virtual_memory().total / (1024 * 1024)  # MB
-    # 计算内存使用率
     memory_percent = (memory_info.rss / (total_memory * 1024 * 1024)) * 100
-    return memory_info.rss / (1024 * 1024), memory_percent  # 返回使用量(MB)和使用率
+    return memory_info.rss / (1024 * 1024), memory_percent
 
 def check_memory_usage():
-    """检查内存使用情况，如果超过阈值则发出警告"""
+    """检查内存使用情况，如果超过阈值则发出警告并执行垃圾回收"""
     memory_usage, memory_percent = get_memory_usage()
     if memory_percent > MEMORY_THRESHOLD:
         print(f"警告：内存使用超过阈值: {memory_usage:.2f}MB ({memory_percent:.1f}%)")
+        gc.collect()
     return memory_usage, memory_percent
+
+def get_total_rows(file_path: str) -> int:
+    """获取CSV文件的总行数（不包括标题行）"""
+    return sum(1 for _ in open(file_path, 'r', encoding=ENCODING)) - 1
+
+def process_chunk(chunk: pd.DataFrame, columns_to_drop: List[str] = None) -> pd.DataFrame:
+    """处理数据块的通用函数"""
+    if columns_to_drop:
+        chunk = chunk.drop(columns=columns_to_drop)
+    return chunk
+
+def write_chunk(chunk: pd.DataFrame, output_file: str, mode: str = 'w', header: bool = True):
+    """写入数据块的通用函数"""
+    chunk.to_csv(output_file, mode=mode, index=False, header=header, encoding=ENCODING)
 
 def get_csv_columns(file_path):
     """读取CSV文件的列名"""
@@ -61,48 +75,75 @@ def get_file_size(file_path):
     """获取文件大小（MB）"""
     return os.path.getsize(file_path) / (1024 * 1024)
 
-def split_by_percentage(input_file, output_prefix, percentage, columns_to_drop=None):
+def split_by_rows(input_file: str, output_prefix: str, rows_per_file: int, columns_to_drop=None):
+    """按行数分割CSV文件"""
+    try:
+        total_rows = get_total_rows(input_file)
+        total_files = (total_rows + rows_per_file - 1) // rows_per_file
+        
+        print(f"总行数: {total_rows}, 将分割成 {total_files} 个文件，每个文件 {rows_per_file} 行")
+        pbar = tqdm(total=total_rows, desc="分割进度")
+        
+        current_file = 0
+        processed_bytes = 0
+        
+        for chunk in pd.read_csv(input_file, chunksize=min(BATCH_SIZE, rows_per_file), encoding=ENCODING):
+            chunk = process_chunk(chunk, columns_to_drop)
+            output_file = f"{output_prefix}_{current_file+1}.csv"
+            write_chunk(chunk, output_file)
+            
+            chunk_size = len(chunk)
+            processed_bytes += chunk.memory_usage(deep=True).sum()
+            pbar.update(chunk_size)
+            current_file += 1
+            
+            if processed_bytes >= MEMORY_CHECK_INTERVAL:
+                check_memory_usage()
+                processed_bytes = 0
+        
+        pbar.close()
+        print(f"\n分割完成！已生成 {current_file} 个文件")
+        
+    except Exception as e:
+        print(f"分割文件时出错: {str(e)}")
+        sys.exit(1)
+
+def split_by_percentage(input_file: str, output_prefix: str, percentage: float, columns_to_drop=None):
     """按百分比分割CSV文件"""
     try:
-        # 读取总行数
-        total_rows = sum(1 for _ in open(input_file, 'r', encoding='utf-8-sig')) - 1
+        total_rows = get_total_rows(input_file)
         first_part_rows = int(total_rows * (percentage / 100))
         
         print(f"总行数: {total_rows}, 将分割成 {percentage}% ({first_part_rows}行) 和 {100-percentage}% ({total_rows-first_part_rows}行)")
         pbar = tqdm(total=total_rows, desc="分割进度")
         
-        # 分两部分读取和保存
         current_row = 0
         processed_bytes = 0
         
-        for chunk in pd.read_csv(input_file, chunksize=min(BATCH_SIZE, first_part_rows), encoding='utf-8-sig'):
-            if columns_to_drop:
-                chunk = chunk.drop(columns=columns_to_drop)
-            
+        for chunk in pd.read_csv(input_file, chunksize=min(BATCH_SIZE, first_part_rows), encoding=ENCODING):
+            chunk = process_chunk(chunk, columns_to_drop)
             chunk_size = len(chunk)
-            processed_bytes += chunk.memory_usage(deep=True).sum()
             
             # 处理第一个文件
             if current_row < first_part_rows:
                 rows_for_first = min(chunk_size, first_part_rows - current_row)
                 first_part = chunk.iloc[:rows_for_first]
                 mode = 'a' if current_row > 0 else 'w'
-                first_part.to_csv(f"{output_prefix}_part1.csv", mode=mode, index=False, header=(mode=='w'), encoding='utf-8-sig')
+                write_chunk(first_part, f"{output_prefix}_part1.csv", mode, header=(mode=='w'))
             
             # 处理第二个文件
             if current_row + chunk_size > first_part_rows:
                 start_idx = max(0, first_part_rows - current_row)
                 second_part = chunk.iloc[start_idx:]
                 mode = 'a' if current_row > first_part_rows else 'w'
-                second_part.to_csv(f"{output_prefix}_part2.csv", mode=mode, index=False, header=(mode=='w'), encoding='utf-8-sig')
+                write_chunk(second_part, f"{output_prefix}_part2.csv", mode, header=(mode=='w'))
             
             current_row += chunk_size
+            processed_bytes += chunk.memory_usage(deep=True).sum()
             pbar.update(chunk_size)
             
-            # 定期检查内存使用情况
             if processed_bytes >= MEMORY_CHECK_INTERVAL:
                 check_memory_usage()
-                gc.collect()
                 processed_bytes = 0
         
         pbar.close()
@@ -112,40 +153,34 @@ def split_by_percentage(input_file, output_prefix, percentage, columns_to_drop=N
         print(f"分割文件时出错: {str(e)}")
         sys.exit(1)
 
-def split_by_date(input_file, output_prefix, date_column, date_format, columns_to_drop=None):
+def split_by_date(input_file: str, output_prefix: str, date_column: str, date_format: str, columns_to_drop=None):
     """按日期列分割CSV文件"""
     try:
         # 验证日期列是否存在
-        all_columns = get_csv_columns(input_file)
+        all_columns = pd.read_csv(input_file, nrows=0, encoding=ENCODING).columns
         if date_column not in all_columns:
             print(f"错误：日期列 '{date_column}' 不存在")
             sys.exit(1)
         
-        # 读取数据并转换日期
         print("读取数据并处理日期...")
         processed_bytes = 0
         total_rows = 0
         
-        # 分块读取并处理
-        for chunk in pd.read_csv(input_file, chunksize=BATCH_SIZE, encoding='utf-8-sig'):
+        for chunk in pd.read_csv(input_file, chunksize=BATCH_SIZE, encoding=ENCODING):
             chunk[date_column] = pd.to_datetime(chunk[date_column], format=date_format)
-            if columns_to_drop:
-                chunk = chunk.drop(columns=columns_to_drop)
+            chunk = process_chunk(chunk, columns_to_drop)
             
-            # 按年月分组
             for period, group in chunk.groupby(chunk[date_column].dt.to_period('M')):
                 output_file = f"{output_prefix}_{period}.csv"
                 mode = 'a' if os.path.exists(output_file) else 'w'
-                group.to_csv(output_file, mode=mode, index=False, header=(mode=='w'), encoding='utf-8-sig')
+                write_chunk(group, output_file, mode, header=(mode=='w'))
             
             chunk_size = len(chunk)
             total_rows += chunk_size
             processed_bytes += chunk.memory_usage(deep=True).sum()
             
-            # 定期检查内存使用情况
             if processed_bytes >= MEMORY_CHECK_INTERVAL:
                 check_memory_usage()
-                gc.collect()
                 processed_bytes = 0
                 print(f"已处理 {total_rows} 条记录")
         
@@ -195,7 +230,6 @@ def split_top_n(input_file, output_file, top_n, columns_to_drop=None):
             # 定期检查内存使用情况
             if processed_bytes >= MEMORY_CHECK_INTERVAL:
                 check_memory_usage()
-                gc.collect()
                 processed_bytes = 0
             
             if current_row >= top_n:
@@ -208,18 +242,19 @@ def split_top_n(input_file, output_file, top_n, columns_to_drop=None):
         print(f"处理文件时出错: {str(e)}")
         sys.exit(1)
 
-def split_by_size(input_file, output_prefix, size_per_file_mb, columns_to_drop=None):
+def split_by_size(input_file: str, output_prefix: str, size_per_file_mb: float, columns_to_drop=None):
     """按文件大小分割CSV文件"""
     try:
-        total_size = get_file_size(input_file)
         # 估算每行大小来计算chunksize
-        sample_df = pd.read_csv(input_file, nrows=1000)
+        sample_df = pd.read_csv(input_file, nrows=1000, encoding=ENCODING)
         if columns_to_drop:
             sample_df = sample_df.drop(columns=columns_to_drop)
-        avg_row_size = len(sample_df.to_csv(index=False).encode('utf-8')) / len(sample_df)
+        avg_row_size = len(sample_df.to_csv(index=False).encode(ENCODING)) / len(sample_df)
         rows_per_chunk = int((size_per_file_mb * 1024 * 1024) / avg_row_size)
         
+        total_size = os.path.getsize(input_file) / (1024 * 1024)
         print(f"总大小: {total_size:.2f}MB, 每个文件大小: {size_per_file_mb}MB")
+        
         return split_by_rows(input_file, output_prefix, rows_per_chunk, columns_to_drop)
         
     except Exception as e:

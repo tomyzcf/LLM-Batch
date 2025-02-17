@@ -96,7 +96,7 @@ def calculate_tokens(text: str, encoding_name: str = "cl100k_base") -> Tuple[int
         token_count = len(encoding.encode(str(text)))
         return token_count, char_count
     except Exception as e:
-        logging.warning(f"计算token时出错: {str(e)}")
+        logger.warning(f"计算token时出错: {str(e)}")
         return 0, 0
 
 def estimate_output_tokens(input_tokens: int, task_type: str = "summary") -> int:
@@ -124,7 +124,6 @@ def process_csv_file(
     batch_size: int = BATCH_SIZE
 ) -> Dict:
     """处理单个CSV文件"""
-    logger = logging.getLogger(__name__)
     encoding = detect_file_encoding(file_path)
     total_rows = count_file_lines(file_path, encoding) - 1
     processed_bytes = 0
@@ -184,7 +183,6 @@ def format_number(num: int) -> str:
 
 def main():
     """主函数"""
-    logger = logging.getLogger(__name__)
     start_time = time.time()
     
     try:
