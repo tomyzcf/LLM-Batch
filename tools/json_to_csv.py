@@ -21,6 +21,7 @@ from queue import Queue
 import time
 import sys
 import psutil
+import random
 
 def setup_logging():
     """设置日志配置"""
@@ -249,369 +250,210 @@ def process_document(doc: Dict[str, Any], fieldnames: Set[str]) -> Dict[str, Any
                             processed_doc[field] = json.dumps(value, ensure_ascii=False)
                     elif isinstance(value, list):
                         # 处理列表
-                        if all(isinstance(x, dict) for x in value):
-                            # 如果列表中都是字典,转换为JSON字符串
-                            processed_doc[field] = json.dumps(value, ensure_ascii=False)
+                        if value:  # 只处理非空列表
+                            if all(isinstance(x, dict) for x in value):
+                                # 如果是字典列表，展平每个字典
+                                flattened_list = []
+                                for item in value:
+                                    flattened_item = flatten_json(item)
+                                    flattened_list.append(json.dumps(flattened_item, ensure_ascii=False))
+                                processed_doc[field] = '|'.join(flattened_list)
+                            else:
+                                # 其他类型的列表，直接连接
+                                processed_doc[field] = '|'.join(str(x) for x in value)
                         else:
-                            # 否则用分号连接,并确保每个元素都是字符串
-                            processed_doc[field] = ';'.join(clean_text(str(x)) for x in value)
+                            processed_doc[field] = ''
                     elif isinstance(value, str):
                         # 处理字符串
-                        # 1. 清理HTML内容
-                        if field == 'qwContent':
-                            value = clean_html(value)
-                        # 2. 清理文本
-                        value = clean_text(value)
-                        # 3. 处理JSON字符串
-                        if field in ['s47', 'wenshuAy'] and value.startswith('['):
-                            try:
-                                data = json.loads(value)
-                                value = json.dumps(data, ensure_ascii=False)
-                            except:
-                                pass
-                        processed_doc[field] = value
+                        processed_doc[field] = clean_text(value)
                     else:
-                        # 处理其他类型(数字、布尔等)
-                        processed_doc[field] = str(value) if value is not None else ''
+                        # 处理其他类型
+                        processed_doc[field] = str(value)
                 else:
                     processed_doc[field] = ''
-            except Exception as field_error:
-                error_fields.append((field, str(field_error)))
+            except Exception as e:
+                error_fields.append(field)
                 processed_doc[field] = ''
-                continue
+                logging.warning(f"处理字段 {field} 时出错: {str(e)}")
         
-        # 处理文书正文部分
-        for field in ['s22', 's23', 's25', 's26', 's27', 's28']:
-            try:
-                if field in doc and doc[field] is not None:
-                    processed_doc[field] = clean_text(str(doc[field]))
-            except Exception as field_error:
-                error_fields.append((field, str(field_error)))
-                processed_doc[field] = ''
-                continue
+        if error_fields:
+            logging.warning(f"以下字段处理失败: {', '.join(error_fields)}")
+            
+        return processed_doc
         
     except Exception as e:
-        logger.error(f"处理文档时出错: {str(e)}")
-        logger.debug(f"问题文档: {json.dumps(doc, ensure_ascii=False)}")
-        error_fields.append(('document_level', str(e)))
-    
-    return processed_doc, error_fields
+        logging.error(f"处理文档时出错: {str(e)}")
+        return {field: '' for field in fieldnames}
 
 def process_input_file(input_file: str) -> List[Dict]:
-    """处理输入文件，包括编码修复和JSON解析"""
-    logger = logging.getLogger(__name__)
-    processed_docs = []
-    
+    """处理输入文件，返回JSON对象列表"""
     try:
-        # 1. 获取文件大小用于进度显示
-        file_size = os.path.getsize(input_file)
-        logger.info(f"开始处理文件，总大小: {file_size / (1024*1024):.2f} MB")
+        # 读取文件内容
+        content, encoding = try_different_encodings(input_file)
+        logging.info(f"使用 {encoding} 编码读取文件")
         
-        # 2. 检测和修复文件编码
-        logger.info("开始检测文件编码...")
-        with open(input_file, 'rb') as f:
-            sample = f.read(32768)  # 读取32KB
-            result = chardet.detect(sample)
-            encoding = result['encoding'] or 'utf-8'
-            confidence = result['confidence']
-            logger.info(f"检测到编码: {encoding}, 置信度: {confidence}")
-            
-        # 3. 使用更健壮的方式解析JSON
-        logger.info("开始解析JSON文件...")
-        with open(input_file, 'r', encoding=encoding) as f:
-            content = f.read().strip()
-            
-            # 显示读取进度
-            with tqdm(total=len(content), desc="读取进度", unit='B', unit_scale=True) as pbar:
-                # 尝试直接解析
-                try:
-                    data = json.loads(content)
-                    pbar.update(len(content))
-                    # 如果是单个对象，转换为列表
-                    if isinstance(data, dict):
-                        processed_docs = [data]
-                        logger.info("成功解析单个JSON对象")
-                    else:
-                        processed_docs = data
-                        logger.info(f"成功解析JSON数组，包含 {len(processed_docs)} 个文档")
-                except json.JSONDecodeError as e:
-                    logger.error(f"JSON解析失败，尝试修复格式: {str(e)}")
-                    # 如果解析失败，尝试修复格式
-                    if not content.startswith('['):
-                        content = '[' + content
-                    if not content.endswith(']'):
-                        content = content + ']'
-                    # 修复对象之间缺少逗号的问题
-                    content = re.sub(r'}\s*{', '},{', content)
-                    
-                    try:
-                        data = json.loads(content)
-                        pbar.update(len(content))
-                        processed_docs = data if isinstance(data, list) else [data]
-                        logger.info(f"通过格式修复成功解析 {len(processed_docs)} 个文档")
-                    except json.JSONDecodeError as e:
-                        logger.error(f"格式修复后仍然解析失败，尝试逐行解析: {str(e)}")
-                        # 如果整体解析失败，尝试逐行解析
-                        lines = re.split(r'}\s*{', content.strip('[]'))
-                        for i, line in enumerate(lines):
-                            line = line.strip()
-                            if not line:
-                                continue
-                            if not line.startswith('{'):
-                                line = '{' + line
-                            if not line.endswith('}'):
-                                line = line + '}'
-                            try:
-                                doc = json.loads(line)
-                                if isinstance(doc, dict):
-                                    processed_docs.append(doc)
-                            except json.JSONDecodeError:
-                                logger.warning(f"无法解析第 {i + 1} 行")
-                                continue
-                            
-                            # 更新进度
-                            pbar.update(len(line) + 1)
-                            
-                            # 定期清理内存
-                            if len(processed_docs) % 1000 == 0:
-                                gc.collect()
-                        
-                        if processed_docs:
-                            logger.info(f"通过逐行解析成功解析 {len(processed_docs)} 个文档")
-                        else:
-                            logger.error("所有解析方法都失败")
+        # 修复JSON格式
+        content = fix_json_format(content)
+        
+        # 解析JSON
+        try:
+            data = json.loads(content)
+            if not isinstance(data, list):
+                data = [data]
+            return data
+        except json.JSONDecodeError as e:
+            logging.error(f"JSON解析错误: {str(e)}")
+            sys.exit(1)
             
     except Exception as e:
-        logger.error(f"处理文件时出错: {str(e)}")
-    
-    return processed_docs
+        logging.error(f"处理输入文件时出错: {str(e)}")
+        sys.exit(1)
 
 def collect_fields_with_sampling(docs: List[Dict], sample_size: int = 1000) -> Set[str]:
-    """使用采样方式收集字段名
+    """从样本中收集字段名"""
+    fieldnames = set()
     
-    Args:
-        docs: 文档列表
-        sample_size: 采样大小，默认1000
+    # 确定采样大小
+    sample_size = min(sample_size, len(docs))
+    sample_indices = random.sample(range(len(docs)), sample_size)
     
-    Returns:
-        Set[str]: 收集到的字段名集合
-    """
-    logger = logging.getLogger(__name__)
-    fieldnames: Set[str] = set()
-    processed_count = 0
+    # 从样本中收集字段
+    for i in tqdm(sample_indices, desc="收集字段名"):
+        collect_all_fields(docs[i], fieldnames)
     
-    # 计算采样间隔
-    total_docs = len(docs)
-    if total_docs <= sample_size:
-        step = 1
-    else:
-        step = total_docs // sample_size
-    
-    logger.info(f"开始采样收集字段名，采样间隔: {step}")
-    
-    # 使用集合记录已处理过的字段组合的hash
-    processed_field_combinations = set()
-    
-    for i in range(0, total_docs, step):
-        doc = docs[i]
-        
-        # 获取当前文档的字段组合hash
-        current_fields = frozenset(doc.keys())
-        current_hash = hash(current_fields)
-        
-        # 如果这个字段组合已经处理过，跳过
-        if current_hash in processed_field_combinations:
-            continue
-            
-        processed_field_combinations.add(current_hash)
-        collect_all_fields(doc, fieldnames)
-        processed_count += 1
-            
-        # 定期清理内存
-        if processed_count % 100 == 0:
-            gc.collect()
-            logger.info(f"已处理{processed_count}个样本，当前字段数: {len(fieldnames)}")
-    
-    logger.info(f"字段采样完成，共处理{processed_count}个样本，收集到{len(fieldnames)}个字段")
     return fieldnames
 
 def stream_process_json(input_file: str, output_file: str, batch_size: int = 1000) -> None:
-    """使用流式处理方式转换JSON文件为CSV"""
-    logger = logging.getLogger(__name__)
+    """流式处理JSON文件并输出为CSV"""
+    logger = setup_logging()
+    logger.info(f"开始处理文件: {input_file}")
+    
+    # 创建输出目录（如果不存在）
+    output_dir = os.path.dirname(output_file)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
     
     try:
-        # 确保输出目录存在
-        output_dir = os.path.dirname(output_file)
-        if output_dir and not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-            
-        # 准备统计信息
-        stats = {
-            'total_docs': 0,
-            'processed_docs': 0,
-            'success_docs': 0,
-            'failed_docs': 0,
-            'field_errors': {}
-        }
-        
-        # 准备错误日志和未处理文档文件
-        base_name = os.path.splitext(os.path.basename(output_file))[0]
-        error_log_file = os.path.join(output_dir, f"{base_name}_errors.log")
-        unprocessed_file = os.path.join(output_dir, f"{base_name}_unprocessed.json")
-        
-        # 第一次扫描：统计总文档数和收集字段名
-        logger.info("第一次扫描：统计总文档数和收集字段名...")
+        # 第一次扫描：收集所有字段名
+        logger.info("第一次扫描：收集字段名...")
         fieldnames = set()
-        sample_count = 0
-        sample_interval = 100  # 每100条记录采样一次
         
         with open(input_file, 'rb') as f:
-            # 检测文件编码
-            raw_data = f.read(4096)
-            result = chardet.detect(raw_data)
-            encoding = result['encoding'] or 'utf-8'
-            f.seek(0)
+            # 使用ijson流式解析JSON
+            parser = ijson.parse(f)
+            current_object = {}
+            current_path = []
             
-            # 统计总文档数并采样字段
-            parser = ijson.items(f, 'item')
-            for doc in parser:
-                stats['total_docs'] += 1
-                if stats['total_docs'] % sample_interval == 0 and sample_count < 1000:
-                    collect_all_fields(doc, fieldnames)
-                    sample_count += 1
-                    
-                # 显示进度
-                if stats['total_docs'] % 10000 == 0:
-                    logger.info(f"已扫描 {stats['total_docs']} 条记录")
+            for prefix, event, value in parser:
+                if event == 'start_map':
+                    current_path.append(prefix)
+                elif event == 'end_map':
+                    if len(current_path) == 1:  # 一个完整的对象
+                        collect_all_fields(current_object, fieldnames)
+                        current_object = {}
+                    current_path.pop()
+                elif event == 'map_key':
+                    current_path.append(value)
+                else:
+                    if current_path:
+                        # 构建当前字段的完整路径
+                        field_path = '_'.join(filter(None, current_path))
+                        # 更新当前对象
+                        current_dict = current_object
+                        for part in current_path[:-1]:
+                            if part:
+                                current_dict = current_dict.setdefault(part, {})
+                        if current_path[-1]:
+                            current_dict[current_path[-1]] = value
+                    current_path.pop()
         
-        logger.info(f"文件扫描完成，共有 {stats['total_docs']} 条记录")
-        logger.info(f"字段采样完成，共采样 {sample_count} 条记录，收集到 {len(fieldnames)} 个字段")
+        logger.info(f"找到 {len(fieldnames)} 个字段")
         
         # 第二次扫描：处理数据并写入CSV
         logger.info("第二次扫描：处理数据并写入CSV...")
-        with open(input_file, 'rb') as infile, \
-             open(output_file, 'w', encoding='utf-8-sig', newline='') as csvfile, \
-             open(error_log_file, 'w', encoding='utf-8') as error_file, \
-             open(unprocessed_file, 'w', encoding='utf-8') as unprocessed_file:
+        
+        # 创建CSV文件并写入表头
+        with open(output_file, 'w', newline='', encoding='utf-8-sig') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=sorted(fieldnames))
+            writer.writeheader()
             
-            # 写入CSV头
-            writer = csv.writer(
-                csvfile,
-                quoting=csv.QUOTE_ALL,
-                escapechar='\\',
-                doublequote=True
-            )
-            writer.writerow(list(fieldnames))
-            
-            # 写入未处理文件的头部
-            unprocessed_file.write('[\n')
-            
-            # 使用ijson流式处理
-            parser = ijson.items(infile, 'item')
-            batch = []
-            unprocessed_count = 0
-            stats['processed_docs'] = 0  # 重置处理计数
-            
-            # 使用tqdm显示进度，设置总数为实际文档数
-            for doc in tqdm(parser, desc="处理进度", total=stats['total_docs']):
-                stats['processed_docs'] += 1
-                processed_doc, error_fields = process_document(doc, fieldnames)
+            # 重新打开输入文件
+            with open(input_file, 'rb') as f:
+                # 使用ijson流式解析JSON
+                objects = ijson.items(f, 'item')
                 
-                # 处理错误情况
-                if error_fields:
-                    stats['failed_docs'] += 1
-                    # 记录错误日志
-                    error_entry = {
-                        'doc_index': stats['processed_docs'],
-                        'errors': error_fields,
-                        'original_doc': doc
-                    }
-                    error_file.write(json.dumps(error_entry, ensure_ascii=False) + '\n')
+                # 批量处理对象
+                batch = []
+                total_processed = 0
+                
+                for obj in objects:
+                    # 处理单个对象
+                    processed_obj = process_document(obj, fieldnames)
+                    batch.append(processed_obj)
                     
-                    # 写入未处理文档
-                    if unprocessed_count > 0:
-                        unprocessed_file.write(',\n')
-                    unprocessed_file.write(json.dumps(doc, ensure_ascii=False, indent=2))
-                    unprocessed_count += 1
-                    
-                    # 更新字段错误统计
-                    for field, error in error_fields:
-                        stats['field_errors'][field] = stats['field_errors'].get(field, 0) + 1
-                else:
-                    stats['success_docs'] += 1
-                    
-                    # 写入处理后的文档到CSV
-                    row = []
-                    for field in fieldnames:
-                        value = processed_doc.get(field, '')
-                        value = str(value).replace('\n', ' ').replace('\r', ' ')
-                        row.append(value)
-                    
-                    batch.append(row)
-                    
-                    # 批量写入CSV
+                    # 当批次达到指定大小时写入文件
                     if len(batch) >= batch_size:
                         writer.writerows(batch)
+                        total_processed += len(batch)
+                        logger.info(f"已处理 {total_processed} 条记录")
                         batch = []
                         
-                # 定期清理内存
-                if stats['processed_docs'] % 10000 == 0:
-                    gc.collect()
-                    # 显示内存使用情况
-                    process = psutil.Process()
-                    memory_info = process.memory_info()
-                    logger.info(f"已处理 {stats['processed_docs']} 条记录，当前内存使用: {memory_info.rss / 1024 / 1024:.2f}MB")
-            
-            # 写入最后一批数据
-            if batch:
-                writer.writerows(batch)
-            
-            # 写入未处理文件的尾部
-            unprocessed_file.write('\n]')
+                        # 强制刷新文件缓冲区
+                        csvfile.flush()
+                        
+                        # 清理内存
+                        gc.collect()
+                
+                # 写入剩余的对象
+                if batch:
+                    writer.writerows(batch)
+                    total_processed += len(batch)
+                    logger.info(f"已处理 {total_processed} 条记录")
         
-        # 输出统计信息
-        success_rate = (stats['success_docs'] / stats['total_docs']) * 100 if stats['total_docs'] > 0 else 0
-        logger.info(f"\n处理统计:")
-        logger.info(f"总文档数: {stats['total_docs']}")
-        logger.info(f"成功处理: {stats['success_docs']}")
-        logger.info(f"处理失败: {stats['failed_docs']}")
-        logger.info(f"成功率: {success_rate:.2f}%")
+        logger.info(f"处理完成！输出文件：{output_file}")
         
-        if stats['field_errors']:
-            logger.info("\n字段错误统计:")
-            for field, count in sorted(stats['field_errors'].items(), key=lambda x: x[1], reverse=True):
-                logger.info(f"{field}: {count}次错误")
-        
-        logger.info(f"\n错误详细信息已保存至: {error_log_file}")
-        if unprocessed_count > 0:
-            logger.info(f"未处理成功的原始文档已保存至: {unprocessed_file}")
-            
     except Exception as e:
         logger.error(f"处理文件时出错: {str(e)}")
-        raise
+        sys.exit(1)
+
+def process_directory(input_path: str, output_path: str, batch_size: int = 1000) -> None:
+    """处理目录下的所有JSON文件"""
+    logger = setup_logging()
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+    
+    # 确保输出目录存在
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    if input_path.is_file():
+        # 如果输入是文件，直接处理
+        if output_path.is_dir():
+            output_file = output_path / f"{input_path.stem}.csv"
+        else:
+            output_file = output_path
+        stream_process_json(str(input_path), str(output_file), batch_size)
+    elif input_path.is_dir():
+        # 如果输入是目录，处理所有JSON文件
+        json_files = list(input_path.glob("*.json"))
+        logger.info(f"在目录 {input_path} 中找到 {len(json_files)} 个JSON文件")
+        
+        for json_file in json_files:
+            output_file = output_path / f"{json_file.stem}.csv"
+            logger.info(f"处理文件: {json_file}")
+            stream_process_json(str(json_file), str(output_file), batch_size)
+    else:
+        logger.error(f"输入路径 {input_path} 不存在")
+        sys.exit(1)
 
 def main():
-    parser = argparse.ArgumentParser(description='将JSON文件转换为CSV格式')
-    parser.add_argument('input_file', help='输入的JSON文件路径')
-    parser.add_argument('output_file', help='输出的CSV文件路径')
-    parser.add_argument('--batch-size', type=int, default=1000, help='批处理大小')
-    parser.add_argument('--debug', action='store_true', help='启用调试日志')
+    parser = argparse.ArgumentParser(description='JSON转CSV工具 - 支持处理大文件和目录')
+    parser.add_argument('input_path', help='输入JSON文件或目录的路径')
+    parser.add_argument('output_path', help='输出CSV文件或目录的路径')
+    parser.add_argument('--batch-size', type=int, default=1000, help='批处理大小（默认：1000）')
+    
     args = parser.parse_args()
     
-    # 设置日志级别
-    log_level = logging.DEBUG if args.debug else logging.INFO
-    logging.basicConfig(
-        level=log_level,
-        format='%(asctime)s - %(levelname)s - %(message)s'
-    )
-    logger = logging.getLogger(__name__)
-    
-    try:
-        # 使用新的流式处理函数替代原来的json_to_csv
-        stream_process_json(args.input_file, args.output_file, args.batch_size)
-    except Exception as e:
-        logger.error(f"转换失败: {str(e)}")
-        sys.exit(1)
+    process_directory(args.input_path, args.output_path, args.batch_size)
 
 if __name__ == '__main__':
     main() 

@@ -175,14 +175,45 @@ def create_sample(input_file: str, output_file: str, sample_size: int = 1, batch
         finally:
             mm.close()
 
+def process_directory(input_path: str, output_path: str, sample_size: int = 1, batch_size: int = 100):
+    """处理目录下的所有JSON文件"""
+    logger = setup_logging()
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+    
+    # 确保输出目录存在
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    if input_path.is_file():
+        # 如果输入是文件，直接处理
+        if output_path.is_dir():
+            output_file = output_path / f"{input_path.stem}_formatted.json"
+        else:
+            output_file = output_path
+        create_sample(str(input_path), str(output_file), sample_size, batch_size)
+    elif input_path.is_dir():
+        # 如果输入是目录，处理所有JSON文件
+        json_files = list(input_path.glob("*.json"))
+        logger.info(f"在目录 {input_path} 中找到 {len(json_files)} 个JSON文件")
+        
+        for json_file in json_files:
+            output_file = output_path / f"{json_file.stem}_formatted.json"
+            logger.info(f"处理文件: {json_file}")
+            create_sample(str(json_file), str(output_file), sample_size, batch_size)
+    else:
+        logger.error(f"输入路径 {input_path} 不存在")
+        sys.exit(1)
+
 if __name__ == '__main__':
     if len(sys.argv) < 3:
-        print("用法: python json_format.py <input_file> <output_file> [sample_size] [batch_size]")
+        print("用法: python json_format.py <input_path> <output_path> [sample_size] [batch_size]")
+        print("input_path 可以是单个JSON文件或包含JSON文件的目录")
+        print("output_path 可以是输出文件或输出目录")
         sys.exit(1)
         
-    input_file = sys.argv[1]
-    output_file = sys.argv[2]
+    input_path = sys.argv[1]
+    output_path = sys.argv[2]
     sample_size = int(sys.argv[3]) if len(sys.argv) > 3 else 1
     batch_size = int(sys.argv[4]) if len(sys.argv) > 4 else 5000
     
-    create_sample(input_file, output_file, sample_size, batch_size)
+    process_directory(input_path, output_path, sample_size, batch_size)
