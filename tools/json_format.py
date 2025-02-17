@@ -12,10 +12,29 @@ from tqdm import tqdm
 import psutil
 import gc
 
+# 性能优化配置
+MEMORY_CHECK_INTERVAL = 100 * 1024 * 1024  # 每处理100MB检查一次内存
+MEMORY_THRESHOLD = 80  # 内存使用率警告阈值（百分数）
+BATCH_SIZE = 10000  # 默认批处理大小
+BUFFER_SIZE = 8192 * 1024  # 8MB文件缓冲区大小
+GC_INTERVAL = 50 * 1024 * 1024  # 每处理50MB执行一次GC
+
 def get_memory_usage():
     """获取当前进程的内存使用情况"""
     process = psutil.Process(os.getpid())
-    return process.memory_info().rss / 1024 / 1024  # 转换为MB
+    memory_info = process.memory_info()
+    # 获取系统总内存
+    total_memory = psutil.virtual_memory().total / (1024 * 1024)  # MB
+    # 计算内存使用率
+    memory_percent = (memory_info.rss / (total_memory * 1024 * 1024)) * 100
+    return memory_info.rss / (1024 * 1024), memory_percent  # 返回使用量(MB)和使用率
+
+def check_memory_usage(logger):
+    """检查内存使用情况，如果超过阈值则发出警告"""
+    memory_usage, memory_percent = get_memory_usage()
+    if memory_percent > MEMORY_THRESHOLD:
+        logger.warning(f"内存使用超过阈值: {memory_usage:.2f}MB ({memory_percent:.1f}%)")
+    return memory_usage, memory_percent
 
 def setup_logging():
     """设置日志配置"""
@@ -69,6 +88,7 @@ def find_json_objects(mm: mmap.mmap, file_size: int) -> Generator[Dict[str, Any]
     """使用生成器模式逐个产出JSON对象"""
     start = 0
     logger = logging.getLogger(__name__)
+    processed_bytes = 0
     
     with tqdm(total=file_size, desc="处理进度", unit='B', unit_scale=True) as pbar:
         while start < len(mm):
@@ -118,20 +138,25 @@ def find_json_objects(mm: mmap.mmap, file_size: int) -> Generator[Dict[str, Any]
                             
                     pos += 1
                 
-                pbar.update(pos - start)
+                processed_bytes = pos - start
+                pbar.update(processed_bytes)
                 start = pos + 1
                 
+                # 定期检查内存使用情况
+                if processed_bytes >= MEMORY_CHECK_INTERVAL:
+                    check_memory_usage(logger)
+                    processed_bytes = 0
+                
                 # 定期进行垃圾回收
-                if start % (10 * 1024 * 1024) == 0:  # 每10MB检查一次
+                if processed_bytes >= GC_INTERVAL:
                     gc.collect()
-                    current_memory = get_memory_usage()
-                    logger.debug(f"当前内存使用: {current_memory:.2f}MB")
+                    processed_bytes = 0
                     
             except Exception as e:
                 logger.error(f"处理过程中出错: {str(e)}")
                 start += 1
 
-def create_sample(input_file: str, output_file: str, sample_size: int = 1, batch_size: int = 100):
+def create_sample(input_file: str, output_file: str, sample_size: int = 1, batch_size: int = BATCH_SIZE):
     """分批处理JSON对象并创建样本文件"""
     logger = setup_logging()
     logger.info(f"开始从 {input_file} 创建样本文件")
@@ -139,12 +164,12 @@ def create_sample(input_file: str, output_file: str, sample_size: int = 1, batch
     file_size = os.path.getsize(input_file)
     
     # 使用内存映射读取文件
-    with open(input_file, 'rb') as f:
+    with open(input_file, 'rb', buffering=BUFFER_SIZE) as f:
         mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
         
         try:
             # 创建输出文件
-            with open(output_file, 'w', encoding='utf-8') as out:
+            with open(output_file, 'w', encoding='utf-8', buffering=BUFFER_SIZE) as out:
                 out.write('[\n')  # 开始JSON数组
                 
                 # 使用生成器逐个处理对象
@@ -162,11 +187,11 @@ def create_sample(input_file: str, output_file: str, sample_size: int = 1, batch
                     
                     processed_count += 1
                     
-                    # 定期清理内存
+                    # 定期清理内存并检查使用情况
                     if processed_count % batch_size == 0:
                         gc.collect()
-                        current_memory = get_memory_usage()
-                        logger.info(f"已处理 {processed_count} 个对象，当前内存使用: {current_memory:.2f}MB")
+                        memory_usage, memory_percent = check_memory_usage(logger)
+                        logger.info(f"已处理 {processed_count} 个对象，当前内存使用: {memory_usage:.2f}MB ({memory_percent:.1f}%)")
                 
                 out.write('\n]')  # 结束JSON数组
                     
@@ -175,7 +200,7 @@ def create_sample(input_file: str, output_file: str, sample_size: int = 1, batch
         finally:
             mm.close()
 
-def process_directory(input_path: str, output_path: str, sample_size: int = 1, batch_size: int = 100):
+def process_directory(input_path: str, output_path: str, sample_size: int = 1, batch_size: int = BATCH_SIZE):
     """处理目录下的所有JSON文件"""
     logger = setup_logging()
     input_path = Path(input_path)
@@ -214,6 +239,6 @@ if __name__ == '__main__':
     input_path = sys.argv[1]
     output_path = sys.argv[2]
     sample_size = int(sys.argv[3]) if len(sys.argv) > 3 else 1
-    batch_size = int(sys.argv[4]) if len(sys.argv) > 4 else 5000
+    batch_size = int(sys.argv[4]) if len(sys.argv) > 4 else BATCH_SIZE
     
     process_directory(input_path, output_path, sample_size, batch_size)

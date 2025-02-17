@@ -23,6 +23,13 @@ import sys
 import psutil
 import random
 
+# 性能优化配置
+MEMORY_CHECK_INTERVAL = 100 * 1024 * 1024  # 每处理100MB检查一次内存
+MEMORY_THRESHOLD = 80  # 内存使用率警告阈值（百分数）
+BATCH_SIZE = 10000  # 默认批处理大小
+BUFFER_SIZE = 8192 * 1024  # 8MB文件缓冲区大小
+GC_INTERVAL = 50 * 1024 * 1024  # 每处理50MB执行一次GC
+
 def setup_logging():
     """设置日志配置"""
     logging.basicConfig(
@@ -323,7 +330,24 @@ def collect_fields_with_sampling(docs: List[Dict], sample_size: int = 1000) -> S
     
     return fieldnames
 
-def stream_process_json(input_file: str, output_file: str, batch_size: int = 1000) -> None:
+def get_memory_usage():
+    """获取当前进程的内存使用情况"""
+    process = psutil.Process(os.getpid())
+    memory_info = process.memory_info()
+    # 获取系统总内存
+    total_memory = psutil.virtual_memory().total / (1024 * 1024)  # MB
+    # 计算内存使用率
+    memory_percent = (memory_info.rss / (total_memory * 1024 * 1024)) * 100
+    return memory_info.rss / (1024 * 1024), memory_percent  # 返回使用量(MB)和使用率
+
+def check_memory_usage(logger):
+    """检查内存使用情况，如果超过阈值则发出警告"""
+    memory_usage, memory_percent = get_memory_usage()
+    if memory_percent > MEMORY_THRESHOLD:
+        logger.warning(f"内存使用超过阈值: {memory_usage:.2f}MB ({memory_percent:.1f}%)")
+    return memory_usage, memory_percent
+
+def stream_process_json(input_file: str, output_file: str, batch_size: int = BATCH_SIZE) -> None:
     """流式处理JSON文件并输出为CSV"""
     logger = setup_logging()
     logger.info(f"开始处理文件: {input_file}")
@@ -337,8 +361,9 @@ def stream_process_json(input_file: str, output_file: str, batch_size: int = 100
         # 第一次扫描：收集所有字段名
         logger.info("第一次扫描：收集字段名...")
         fieldnames = set()
+        processed_bytes = 0
         
-        with open(input_file, 'rb') as f:
+        with open(input_file, 'rb', buffering=BUFFER_SIZE) as f:
             # 使用ijson流式解析JSON
             parser = ijson.parse(f)
             current_object = {}
@@ -351,6 +376,14 @@ def stream_process_json(input_file: str, output_file: str, batch_size: int = 100
                     if len(current_path) == 1:  # 一个完整的对象
                         collect_all_fields(current_object, fieldnames)
                         current_object = {}
+                        
+                        # 定期检查内存使用情况
+                        processed_bytes += 1
+                        if processed_bytes >= MEMORY_CHECK_INTERVAL:
+                            check_memory_usage(logger)
+                            gc.collect()
+                            processed_bytes = 0
+                            
                     current_path.pop()
                 elif event == 'map_key':
                     current_path.append(value)
@@ -373,18 +406,19 @@ def stream_process_json(input_file: str, output_file: str, batch_size: int = 100
         logger.info("第二次扫描：处理数据并写入CSV...")
         
         # 创建CSV文件并写入表头
-        with open(output_file, 'w', newline='', encoding='utf-8-sig') as csvfile:
+        with open(output_file, 'w', newline='', encoding='utf-8-sig', buffering=BUFFER_SIZE) as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=sorted(fieldnames))
             writer.writeheader()
             
             # 重新打开输入文件
-            with open(input_file, 'rb') as f:
+            with open(input_file, 'rb', buffering=BUFFER_SIZE) as f:
                 # 使用ijson流式解析JSON
                 objects = ijson.items(f, 'item')
                 
                 # 批量处理对象
                 batch = []
                 total_processed = 0
+                processed_bytes = 0
                 
                 for obj in objects:
                     # 处理单个对象
@@ -395,13 +429,19 @@ def stream_process_json(input_file: str, output_file: str, batch_size: int = 100
                     if len(batch) >= batch_size:
                         writer.writerows(batch)
                         total_processed += len(batch)
-                        logger.info(f"已处理 {total_processed} 条记录")
-                        batch = []
+                        processed_bytes += len(str(batch))  # 估算处理的数据量
+                        
+                        # 定期检查内存使用情况
+                        if processed_bytes >= MEMORY_CHECK_INTERVAL:
+                            memory_usage, memory_percent = check_memory_usage(logger)
+                            logger.info(f"已处理 {total_processed} 条记录，当前内存使用: {memory_usage:.2f}MB ({memory_percent:.1f}%)")
+                            processed_bytes = 0
                         
                         # 强制刷新文件缓冲区
                         csvfile.flush()
                         
                         # 清理内存
+                        batch = []
                         gc.collect()
                 
                 # 写入剩余的对象
@@ -416,7 +456,7 @@ def stream_process_json(input_file: str, output_file: str, batch_size: int = 100
         logger.error(f"处理文件时出错: {str(e)}")
         sys.exit(1)
 
-def process_directory(input_path: str, output_path: str, batch_size: int = 1000) -> None:
+def process_directory(input_path: str, output_path: str, batch_size: int = BATCH_SIZE) -> None:
     """处理目录下的所有JSON文件"""
     logger = setup_logging()
     input_path = Path(input_path)
@@ -449,9 +489,16 @@ def main():
     parser = argparse.ArgumentParser(description='JSON转CSV工具 - 支持处理大文件和目录')
     parser.add_argument('input_path', help='输入JSON文件或目录的路径')
     parser.add_argument('output_path', help='输出CSV文件或目录的路径')
-    parser.add_argument('--batch-size', type=int, default=1000, help='批处理大小（默认：1000）')
+    parser.add_argument('--batch-size', type=int, default=BATCH_SIZE, help=f'批处理大小（默认：{BATCH_SIZE}）')
+    parser.add_argument('--memory-threshold', type=int, default=MEMORY_THRESHOLD, help=f'内存使用率警告阈值（默认：{MEMORY_THRESHOLD}%）')
+    parser.add_argument('--buffer-size', type=int, default=BUFFER_SIZE, help=f'文件缓冲区大小（默认：{BUFFER_SIZE//1024}KB）')
     
     args = parser.parse_args()
+    
+    # 更新配置
+    global MEMORY_THRESHOLD, BUFFER_SIZE
+    MEMORY_THRESHOLD = args.memory_threshold
+    BUFFER_SIZE = args.buffer_size
     
     process_directory(args.input_path, args.output_path, args.batch_size)
 

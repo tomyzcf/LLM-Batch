@@ -9,6 +9,32 @@ import argparse
 import math
 import random
 from datetime import datetime
+import psutil
+import gc
+
+# 性能优化配置
+MEMORY_CHECK_INTERVAL = 100 * 1024 * 1024  # 每处理100MB检查一次内存
+MEMORY_THRESHOLD = 80  # 内存使用率警告阈值（百分数）
+BATCH_SIZE = 10000  # 默认批处理大小
+BUFFER_SIZE = 8192 * 1024  # 8MB文件缓冲区大小
+GC_INTERVAL = 50 * 1024 * 1024  # 每处理50MB执行一次GC
+
+def get_memory_usage():
+    """获取当前进程的内存使用情况"""
+    process = psutil.Process(os.getpid())
+    memory_info = process.memory_info()
+    # 获取系统总内存
+    total_memory = psutil.virtual_memory().total / (1024 * 1024)  # MB
+    # 计算内存使用率
+    memory_percent = (memory_info.rss / (total_memory * 1024 * 1024)) * 100
+    return memory_info.rss / (1024 * 1024), memory_percent  # 返回使用量(MB)和使用率
+
+def check_memory_usage():
+    """检查内存使用情况，如果超过阈值则发出警告"""
+    memory_usage, memory_percent = get_memory_usage()
+    if memory_percent > MEMORY_THRESHOLD:
+        print(f"警告：内存使用超过阈值: {memory_usage:.2f}MB ({memory_percent:.1f}%)")
+    return memory_usage, memory_percent
 
 def get_csv_columns(file_path):
     """读取CSV文件的列名"""
@@ -47,26 +73,37 @@ def split_by_percentage(input_file, output_prefix, percentage, columns_to_drop=N
         
         # 分两部分读取和保存
         current_row = 0
-        for i, chunk in enumerate(pd.read_csv(input_file, chunksize=10000, encoding='utf-8-sig')):
+        processed_bytes = 0
+        
+        for chunk in pd.read_csv(input_file, chunksize=min(BATCH_SIZE, first_part_rows), encoding='utf-8-sig'):
             if columns_to_drop:
                 chunk = chunk.drop(columns=columns_to_drop)
             
+            chunk_size = len(chunk)
+            processed_bytes += chunk.memory_usage(deep=True).sum()
+            
             # 处理第一个文件
             if current_row < first_part_rows:
-                rows_for_first = min(len(chunk), first_part_rows - current_row)
+                rows_for_first = min(chunk_size, first_part_rows - current_row)
                 first_part = chunk.iloc[:rows_for_first]
                 mode = 'a' if current_row > 0 else 'w'
                 first_part.to_csv(f"{output_prefix}_part1.csv", mode=mode, index=False, header=(mode=='w'), encoding='utf-8-sig')
             
             # 处理第二个文件
-            if current_row + len(chunk) > first_part_rows:
+            if current_row + chunk_size > first_part_rows:
                 start_idx = max(0, first_part_rows - current_row)
                 second_part = chunk.iloc[start_idx:]
                 mode = 'a' if current_row > first_part_rows else 'w'
                 second_part.to_csv(f"{output_prefix}_part2.csv", mode=mode, index=False, header=(mode=='w'), encoding='utf-8-sig')
             
-            current_row += len(chunk)
-            pbar.update(len(chunk))
+            current_row += chunk_size
+            pbar.update(chunk_size)
+            
+            # 定期检查内存使用情况
+            if processed_bytes >= MEMORY_CHECK_INTERVAL:
+                check_memory_usage()
+                gc.collect()
+                processed_bytes = 0
         
         pbar.close()
         print(f"\n分割完成！文件已保存为 {output_prefix}_part1.csv 和 {output_prefix}_part2.csv")
@@ -86,24 +123,33 @@ def split_by_date(input_file, output_prefix, date_column, date_format, columns_t
         
         # 读取数据并转换日期
         print("读取数据并处理日期...")
-        df = pd.read_csv(input_file, encoding='utf-8-sig')
-        df[date_column] = pd.to_datetime(df[date_column], format=date_format)
+        processed_bytes = 0
+        total_rows = 0
         
-        if columns_to_drop:
-            df = df.drop(columns=columns_to_drop)
+        # 分块读取并处理
+        for chunk in pd.read_csv(input_file, chunksize=BATCH_SIZE, encoding='utf-8-sig'):
+            chunk[date_column] = pd.to_datetime(chunk[date_column], format=date_format)
+            if columns_to_drop:
+                chunk = chunk.drop(columns=columns_to_drop)
+            
+            # 按年月分组
+            for period, group in chunk.groupby(chunk[date_column].dt.to_period('M')):
+                output_file = f"{output_prefix}_{period}.csv"
+                mode = 'a' if os.path.exists(output_file) else 'w'
+                group.to_csv(output_file, mode=mode, index=False, header=(mode=='w'), encoding='utf-8-sig')
+            
+            chunk_size = len(chunk)
+            total_rows += chunk_size
+            processed_bytes += chunk.memory_usage(deep=True).sum()
+            
+            # 定期检查内存使用情况
+            if processed_bytes >= MEMORY_CHECK_INTERVAL:
+                check_memory_usage()
+                gc.collect()
+                processed_bytes = 0
+                print(f"已处理 {total_rows} 条记录")
         
-        # 按年月分组
-        groups = df.groupby(df[date_column].dt.to_period('M'))
-        total_groups = len(groups)
-        
-        print(f"将按月份分割成 {total_groups} 个文件")
-        
-        # 保存每个月的数据
-        for period, group in tqdm(groups, desc="分割进度"):
-            output_file = f"{output_prefix}_{period}.csv"
-            group.to_csv(output_file, index=False, encoding='utf-8-sig')
-        
-        print(f"\n分割完成！文件已保存在输出目录中")
+        print(f"\n分割完成！文件已保存在输出目录中，共处理 {total_rows} 条记录")
         
     except Exception as e:
         print(f"分割文件时出错: {str(e)}")
@@ -121,8 +167,10 @@ def split_top_n(input_file, output_file, top_n, columns_to_drop=None):
         
         # 分块读取并处理
         current_row = 0
+        processed_bytes = 0
         first_chunk = True
-        for chunk in pd.read_csv(input_file, chunksize=10000, encoding='utf-8-sig'):
+        
+        for chunk in pd.read_csv(input_file, chunksize=min(BATCH_SIZE, top_n), encoding='utf-8-sig'):
             if current_row >= top_n:
                 break
                 
@@ -138,9 +186,17 @@ def split_top_n(input_file, output_file, top_n, columns_to_drop=None):
             header = first_chunk
             chunk.to_csv(output_file, mode=mode, index=False, header=header, encoding='utf-8-sig')
             
-            current_row += rows_to_save
-            pbar.update(rows_to_save)
+            chunk_size = len(chunk)
+            current_row += chunk_size
+            processed_bytes += chunk.memory_usage(deep=True).sum()
+            pbar.update(chunk_size)
             first_chunk = False
+            
+            # 定期检查内存使用情况
+            if processed_bytes >= MEMORY_CHECK_INTERVAL:
+                check_memory_usage()
+                gc.collect()
+                processed_bytes = 0
             
             if current_row >= top_n:
                 break
@@ -206,11 +262,17 @@ def main():
   # 按日期列分割（按月份分割）
   %(prog)s input.csv --split-date "date_column" --date-format "%%Y-%%m-%%d" --output output_prefix
   
+  # 按行数分割（每个文件1000行）
+  %(prog)s input.csv --split-rows 1000 --output output_prefix
+  
   # 删除指定列（可以指定多个列名）
   %(prog)s input.csv --drop-columns "列名1,列名2" --output output.csv
   
   # 组合使用（截取前N条同时删除列）
   %(prog)s input.csv --top-n 1000 --drop-columns "列名1,列名2" --output output.csv
+  
+  # 性能调优
+  %(prog)s input.csv --top-n 1000 --output output.csv --batch-size 5000 --memory-threshold 90 --buffer-size 16384
 '''
 
     parser = argparse.ArgumentParser(
@@ -219,9 +281,11 @@ def main():
   2. 截取文件的前N条记录
   3. 按百分比分割文件
   4. 按日期列分割文件
-  5. 删除指定的列
-  6. 支持UTF-8编码，确保中文正常显示
-  7. 支持大文件处理，自动分块读取''',
+  5. 按行数分割文件
+  6. 删除指定的列
+  7. 支持UTF-8编码，确保中文正常显示
+  8. 支持大文件处理，自动分块读取
+  9. 内存使用优化，支持性能调优''',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=example_text)
     
@@ -234,16 +298,28 @@ def main():
     split_group.add_argument('--top-n', type=int, help='截取文件的前N条记录')
     split_group.add_argument('--split-percent', type=float, help='按百分比分割，指定第一个文件的百分比（1-99）')
     split_group.add_argument('--split-date', help='按日期列分割，指定用于分割的日期列名')
+    split_group.add_argument('--split-rows', type=int, help='按行数分割，指定每个文件的行数')
     
     # 其他选项
     parser.add_argument('--date-format', help='日期格式，例如：%%Y-%%m-%%d，仅在使用 --split-date 时需要')
     parser.add_argument('--drop-columns', help='要删除的列名，多个列名用逗号分隔，例如：列名1,列名2')
+    
+    # 性能调优选项
+    parser.add_argument('--batch-size', type=int, default=BATCH_SIZE, help=f'批处理大小（默认：{BATCH_SIZE}）')
+    parser.add_argument('--memory-threshold', type=int, default=MEMORY_THRESHOLD, help=f'内存使用率警告阈值（默认：{MEMORY_THRESHOLD}%）')
+    parser.add_argument('--buffer-size', type=int, default=BUFFER_SIZE, help=f'文件缓冲区大小（默认：{BUFFER_SIZE//1024}KB）')
     
     args = parser.parse_args()
 
     if not os.path.exists(args.input_file):
         print(f"错误：找不到输入文件 {args.input_file}")
         sys.exit(1)
+
+    # 更新配置
+    global MEMORY_THRESHOLD, BUFFER_SIZE, BATCH_SIZE
+    MEMORY_THRESHOLD = args.memory_threshold
+    BUFFER_SIZE = args.buffer_size
+    BATCH_SIZE = args.batch_size
 
     # 如果只是显示列名
     if args.show_columns:
@@ -282,10 +358,15 @@ def main():
             print("错误：使用 --split-date 时必须指定 --date-format")
             sys.exit(1)
         split_by_date(args.input_file, args.output, args.split_date, args.date_format, columns_to_drop)
+    elif args.split_rows:
+        if args.split_rows <= 0:
+            print("错误：--split-rows 参数必须大于0")
+            sys.exit(1)
+        split_by_rows(args.input_file, args.output, args.split_rows, columns_to_drop)
     elif columns_to_drop:
         process_csv_file(args.input_file, args.output, columns_to_drop)
     else:
-        print("错误：必须指定一个操作类型（--top-n、--split-percent、--split-date 或 --drop-columns）")
+        print("错误：必须指定一个操作类型（--top-n、--split-percent、--split-date、--split-rows 或 --drop-columns）")
         sys.exit(1)
 
 if __name__ == '__main__':

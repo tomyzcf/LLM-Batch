@@ -1,63 +1,64 @@
-# 数据处理工具集
+# Data Processing Tools
 
 [English](README.md) | [中文](README_zh.md)
 
-本目录包含一系列用于数据处理的独立工具脚本。
+A collection of standalone data processing tools. Each tool supports large file processing and performance optimization.
 
-## 工具列表
+## Tool List
 
-### 1. CSV分割管理器 (csv_splitter_manager.py)
+### 1. CSV Splitter Manager (csv_splitter_manager.py)
+CSV file splitting and management tool with features:
+- Split by rows/size/percentage
+- Split by date column (customizable date format)
+- Column management (drop columns)
+- Large file chunk processing
+- Memory usage optimization
 
-一个功能强大的CSV文件分割和管理工具，支持多种分割方式：
+### 2. JSON Formatter (json_format.py)
+JSON file processing tool:
+- Streaming processing for large files
+- Automatic nested structure handling
+- Batch processing support
+- Memory usage optimization
 
-- 按行数分割：将CSV文件按指定行数分割成多个文件
-- 按文件大小分割：将CSV文件按指定大小（MB）分割
-- 按百分比分割：将文件分割成两部分（如60%/40%）
-- 按日期分割：根据日期列按月份分割文件
-- 按列值分割：根据某列的不同值分割成多个文件
-- 随机分割：随机将文件分割成N份
-- 列管理：支持删除指定列
+### 3. JSON to CSV Converter (json_to_csv.py)
+JSON to CSV conversion tool:
+- Complex JSON structure flattening
+- Automatic encoding handling
+- Streaming processing for large files
+- Memory usage optimization
 
-使用示例：
+### 4. Data Quality Checker (data_quality_check.py)
+Data quality checking tool:
+- Multiple file format support
+- Data integrity checks
+- Anomaly detection
+- Quality report generation
+
+## Performance Parameters
+All tools support the following performance optimization parameters:
 ```bash
-# 显示帮助信息
-python csv_splitter_manager.py -h
-
-# 显示CSV文件的列名
-python csv_splitter_manager.py input.csv --show-columns
-
-# 按行数分割（每1000行一个文件）
-python csv_splitter_manager.py input.csv --split-rows 1000 --output output_prefix
-
-# 按大小分割（每个文件10MB）
-python csv_splitter_manager.py input.csv --split-size 10 --output output_prefix
+--batch-size     Batch processing size (default: 10000)
+--memory-threshold Memory usage warning threshold (default: 80%)
+--buffer-size    File buffer size (default: 8MB)
 ```
 
-### 2. JSON格式化工具 (json_format.py)
+## Usage Guidelines
 
-用于处理和格式化JSON文件的工具：
+1. Performance Optimization:
+   - Adjust memory threshold based on machine configuration
+   - Increase buffer size for large files
+   - Control memory usage through batch size
 
-- JSON文件格式化和验证
-- 支持嵌套结构处理
-- 支持批量处理
+2. Data Processing:
+   - Backup important data before processing
+   - Perform small-scale testing first
+   - Pay attention to file encoding
 
-### 3. JSON转CSV工具 (json_to_csv.py)
-
-将JSON格式数据转换为CSV格式：
-
-- 支持复杂JSON结构的扁平化
-- 支持自定义字段映射
-- 批量转换功能
-
-### 4. 数据质量检查工具 (data_quality_check.py)
-
-全面的数据质量检查工具：
-
-- 支持多种文件格式（CSV、Excel、JSON、Parquet等）
-- 数据完整性检查
-- 数据类型验证
-- 异常值检测
-- 生成质量报告
+3. Error Handling:
+   - Check log output
+   - Adjust parameters when memory warnings occur
+   - Verify input data format when errors occur
 
 ## 注意事项
 
