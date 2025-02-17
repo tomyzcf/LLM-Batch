@@ -12,6 +12,15 @@ import logging
 import numpy as np
 from typing import Dict, List, Optional, Union
 import pyarrow.parquet as pq
+import psutil
+import gc
+import os
+
+# 性能优化配置
+MEMORY_CHECK_INTERVAL = 100 * 1024 * 1024  # 每处理100MB检查一次内存
+MEMORY_THRESHOLD = 80  # 内存使用率警告阈值（百分数）
+BATCH_SIZE = 10000  # 默认批处理大小
+BUFFER_SIZE = 8192 * 1024  # 8MB文件缓冲区大小
 
 # 配置日志
 logging.basicConfig(
@@ -19,6 +28,22 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+def get_memory_usage():
+    """获取当前进程的内存使用情况"""
+    process = psutil.Process(os.getpid())
+    memory_info = process.memory_info()
+    total_memory = psutil.virtual_memory().total
+    memory_percent = (memory_info.rss / total_memory) * 100
+    return memory_info.rss / (1024 * 1024), memory_percent
+
+def check_memory_usage():
+    """检查内存使用情况，如果超过阈值则发出警告"""
+    memory_usage, memory_percent = get_memory_usage()
+    if memory_percent > MEMORY_THRESHOLD:
+        logger.warning(f"内存使用超过阈值: {memory_usage:.2f}MB ({memory_percent:.1f}%)")
+        gc.collect()
+    return memory_usage, memory_percent
 
 class DataQualityChecker:
     """数据质量检查类"""
@@ -36,6 +61,17 @@ class DataQualityChecker:
         self.data = None
         self.file_path = None
         self.file_type = None
+        self.error_stats = {"errors": [], "error_count": 0}
+        
+    def record_error(self, error_type: str, message: str):
+        """记录错误信息"""
+        self.error_stats["errors"].append({
+            "type": error_type,
+            "message": message,
+            "file": str(self.file_path)
+        })
+        self.error_stats["error_count"] += 1
+        logger.error(f"{error_type}: {message}")
         
     def is_supported_format(self, file_path: Path) -> bool:
         """检查文件格式是否支持"""
@@ -47,11 +83,11 @@ class DataQualityChecker:
         self.file_type = self.file_path.suffix.lower()
         
         if not self.file_path.exists():
-            logger.error(f"文件不存在: {self.file_path}")
+            self.record_error("FileNotFound", f"文件不存在: {self.file_path}")
             return False
             
         if not self.is_supported_format(self.file_path):
-            logger.error(f"不支持的文件格式: {self.file_type}")
+            self.record_error("UnsupportedFormat", f"不支持的文件格式: {self.file_type}")
             logger.info(f"支持的格式: {', '.join(self.SUPPORTED_FORMATS.keys())}")
             return False
         
@@ -75,15 +111,18 @@ class DataQualityChecker:
                 self.data = pd.read_excel(file_path)
                 
             if self.data is None:
-                logger.error(f"无法解析文件内容: {file_path}")
+                self.record_error("LoadError", f"无法解析文件内容: {file_path}")
                 return False
+                
+            # 检查内存使用
+            check_memory_usage()
                 
             logger.info(f"成功加载文件: {file_path}")
             logger.info(f"数据大小: {len(self.data)} 行, {len(self.data.columns)} 列")
             return True
             
         except Exception as e:
-            logger.error(f"加载文件失败: {str(e)}")
+            self.record_error("LoadError", f"加载文件失败: {str(e)}")
             return False
     
     def check_basic_info(self) -> Dict:
@@ -173,14 +212,25 @@ class DataQualityChecker:
         if self.data is None:
             return {"error": "未加载数据文件"}
             
-        return {
-            "基本信息": self.check_basic_info(),
-            "空值检查": self.check_null_values(),
-            "重复值检查": self.check_duplicates(),
-            "数据类型检查": self.check_data_types(),
-            "数值统计": self.check_numeric_stats(),
-            "字符串长度统计": self.check_string_length()
-        }
+        try:
+            results = {
+                "基本信息": self.check_basic_info(),
+                "空值检查": self.check_null_values(),
+                "重复值检查": self.check_duplicates(),
+                "数据类型检查": self.check_data_types(),
+                "数值统计": self.check_numeric_stats(),
+                "字符串长度统计": self.check_string_length(),
+                "错误统计": self.error_stats
+            }
+            
+            # 检查内存使用
+            check_memory_usage()
+            
+            return results
+            
+        except Exception as e:
+            self.record_error("CheckError", f"执行检查时出错: {str(e)}")
+            return {"error": str(e), "错误统计": self.error_stats}
 
     def get_single_record(self, file_path: Union[str, Path]) -> Dict:
         """只读取一条记录样例（第二行数据）"""

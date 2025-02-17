@@ -12,6 +12,20 @@ from tqdm import tqdm
 import psutil
 import gc
 import time
+import chardet
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# 性能优化配置
+MEMORY_CHECK_INTERVAL = 100 * 1024 * 1024  # 每处理100MB检查一次内存
+MEMORY_THRESHOLD = 80  # 内存使用率警告阈值（百分数）
+BATCH_SIZE = 10000  # 默认批处理大小
+BUFFER_SIZE = 8192 * 1024  # 8MB文件缓冲区大小
 
 DISCLAIMER = """
 免责声明：
@@ -24,23 +38,29 @@ DISCLAIMER = """
 def get_memory_usage():
     """获取当前进程的内存使用情况"""
     process = psutil.Process(os.getpid())
-    return process.memory_info().rss / 1024 / 1024  # 转换为MB
+    memory_info = process.memory_info()
+    total_memory = psutil.virtual_memory().total
+    memory_percent = (memory_info.rss / total_memory) * 100
+    return memory_info.rss / (1024 * 1024), memory_percent
 
-def setup_logging():
-    """设置日志配置"""
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s'
-    )
-    return logging.getLogger(__name__)
+def check_memory_usage():
+    """检查内存使用情况，如果超过阈值则发出警告"""
+    memory_usage, memory_percent = get_memory_usage()
+    if memory_percent > MEMORY_THRESHOLD:
+        logger.warning(f"内存使用超过阈值: {memory_usage:.2f}MB ({memory_percent:.1f}%)")
+        gc.collect()
+    return memory_usage, memory_percent
 
 def detect_file_encoding(file_path: str) -> str:
     """检测文件编码"""
-    import chardet
-    with open(file_path, 'rb') as file:
-        raw_data = file.read(10000)  # 读取前10000字节
-        result = chardet.detect(raw_data)
-        return result['encoding'] or 'utf-8'  # 如果检测失败，默认使用utf-8
+    try:
+        with open(file_path, 'rb') as file:
+            raw_data = file.read(10000)
+            result = chardet.detect(raw_data)
+            return result['encoding'] or 'utf-8'
+    except Exception as e:
+        logger.error(f"检测文件编码时出错: {str(e)}")
+        return 'utf-8'
 
 def count_file_lines(file_path: str, encoding: str) -> int:
     """快速计算文件行数"""
@@ -101,47 +121,62 @@ def process_csv_file(
     file_path: str,
     selected_columns: List[str],
     prompt_tokens: int,
-    batch_size: int = 500000
+    batch_size: int = BATCH_SIZE
 ) -> Dict:
     """处理单个CSV文件"""
     logger = logging.getLogger(__name__)
     encoding = detect_file_encoding(file_path)
     total_rows = count_file_lines(file_path, encoding) - 1
+    processed_bytes = 0
     
     results = {
         'total_rows': 0,
         'input_tokens': 0,
         'input_chars': 0,
-        'estimated_output_tokens': 0
+        'estimated_output_tokens': 0,
+        'errors': []
     }
     
-    with tqdm(total=total_rows, desc=f"处理 {os.path.basename(file_path)}", unit='行') as pbar:
-        for chunk in pd.read_csv(file_path, 
-                               usecols=selected_columns,
-                               chunksize=batch_size,
-                               encoding=encoding,
-                               on_bad_lines='skip'):
-            
-            chunk_size = len(chunk)
-            results['total_rows'] += chunk_size
-            
-            chunk_text = chunk[selected_columns].fillna('').astype(str).agg(' '.join, axis=1)
-            for text in chunk_text:
-                tokens, chars = calculate_tokens(text)
-                results['input_tokens'] += tokens + prompt_tokens
-                results['input_chars'] += chars
-            
-            pbar.update(chunk_size)
-            pbar.set_postfix({
-                '内存': f'{get_memory_usage():.1f}MB',
-                '字符/token比': f'{results["input_chars"]/(results["input_tokens"] or 1):.1f}'
-            })
-            
-            del chunk
-            gc.collect()
-    
-    results['estimated_output_tokens'] = estimate_output_tokens(results['input_tokens'])
-    return results
+    try:
+        with tqdm(total=total_rows, desc=f"处理 {os.path.basename(file_path)}", unit='行') as pbar:
+            for chunk in pd.read_csv(file_path, 
+                                   usecols=selected_columns,
+                                   chunksize=batch_size,
+                                   encoding=encoding,
+                                   on_bad_lines='skip'):
+                
+                chunk_size = len(chunk)
+                results['total_rows'] += chunk_size
+                
+                chunk_text = chunk[selected_columns].fillna('').astype(str).agg(' '.join, axis=1)
+                for text in chunk_text:
+                    tokens, chars = calculate_tokens(text)
+                    results['input_tokens'] += tokens + prompt_tokens
+                    results['input_chars'] += chars
+                
+                processed_bytes += chunk.memory_usage(deep=True).sum()
+                pbar.update(chunk_size)
+                
+                # 检查内存使用
+                if processed_bytes >= MEMORY_CHECK_INTERVAL:
+                    memory_usage, memory_percent = check_memory_usage()
+                    pbar.set_postfix({
+                        '内存': f'{memory_usage:.1f}MB',
+                        '字符/token比': f'{results["input_chars"]/(results["input_tokens"] or 1):.1f}'
+                    })
+                    processed_bytes = 0
+                
+                del chunk
+                gc.collect()
+        
+        results['estimated_output_tokens'] = estimate_output_tokens(results['input_tokens'])
+        return results
+        
+    except Exception as e:
+        error_msg = f"处理文件时出错: {str(e)}"
+        logger.error(error_msg)
+        results['errors'].append(error_msg)
+        return results
 
 def format_number(num: int) -> str:
     """格式化数字，添加千位分隔符"""
@@ -149,7 +184,7 @@ def format_number(num: int) -> str:
 
 def main():
     """主函数"""
-    logger = setup_logging()
+    logger = logging.getLogger(__name__)
     start_time = time.time()
     
     try:
