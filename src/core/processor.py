@@ -124,6 +124,15 @@ class BatchProcessor:
         
         # 加载处理进度
         current_pos = start_pos - 1
+        stats = {
+            'total': 0,
+            'success': 0,
+            'api_error': 0,
+            'empty_result': 0,
+            'json_error': 0,
+            'other_error': 0
+        }
+        
         if progress_file.exists():
             try:
                 with open(progress_file, 'r', encoding='utf-8') as f:
@@ -142,17 +151,6 @@ class BatchProcessor:
         Logger.info(f"\n开始处理文件: {file_path}")
         Logger.info(f"处理范围: 第 {current_pos + 1} 行 到 {end_pos if end_pos else '文件末尾'}")
         Logger.info(f"剩余行数: {remaining_lines}")
-        
-        # 如果没有之前的统计信息，初始化统计信息
-        if not stats:
-            stats = {
-                'total': 0,
-                'success': 0,
-                'api_error': 0,
-                'empty_result': 0,
-                'json_error': 0,
-                'other_error': 0
-            }
         
         # 批次计数器
         batch_count = 0
