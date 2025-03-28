@@ -21,12 +21,14 @@ JSON file processing tool:
 - Batch processing support
 - Memory usage optimization
 
-### 3. JSON to CSV Converter (json_to_csv.py)
-JSON to CSV conversion tool:
-- Complex JSON structure flattening
-- Automatic encoding handling
-- Streaming processing for large files
-- Memory usage optimization
+### 3. Data Format Converter (data_converter.py)
+Universal data format conversion tool:
+- Support for JSON, CSV, Excel, and Parquet formats
+- Automatic input format detection
+- Directory batch conversion
+- Nested structure handling
+- Large file streaming processing
+- Memory optimization for big datasets
 
 ### 4. Data Quality Checker (data_quality_check.py)
 Data quality checking tool:

@@ -42,12 +42,36 @@ JSON文件处理工具：
 - 支持批量处理
 - 内存使用优化
 
-### 3. JSON转CSV工具 (json_to_csv.py)
-JSON转CSV转换工具：
-- 支持复杂JSON结构扁平化
-- 自动处理编码问题
-- 支持流式处理大文件
-- 内存使用优化
+### 3. 数据格式转换工具 (data_converter.py)
+通用数据格式转换工具：
+- 支持JSON、CSV、Excel和Parquet格式之间的转换
+- 自动检测输入文件格式
+- 支持目录批量转换
+- 处理嵌套数据结构
+- 大文件流式处理
+- 内存优化处理大数据集
+
+使用示例：
+```bash
+# 显示帮助信息
+python data_converter.py -h
+
+# 转换单个文件（自动检测输入格式，默认输出为CSV）
+python data_converter.py input.json
+python data_converter.py input.xlsx --output-format parquet
+
+# 转换目录（自动检测输入格式，默认输出为CSV）
+python data_converter.py input_dir
+
+# 指定自定义输出路径
+python data_converter.py input.json --output-path custom/output.csv
+
+# 使用自定义批处理大小
+python data_converter.py large_data.json --batch-size 5000
+
+# 显示格式转换指南
+python data_converter.py --guide
+```
 
 ### 4. 数据质量检查工具 (data_quality_check.py)
 数据质量检查工具：
