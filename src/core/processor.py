@@ -118,9 +118,27 @@ class BatchProcessor:
         Logger.info("---" * 20)
         
         # 获取总行数和剩余行数
-        file_total_lines = sum(1 for _ in open(file_path, 'r', encoding='utf-8')) - 1  # 减去表头
-        if end_pos:
-            file_total_lines = min(file_total_lines, end_pos)
+        try:
+            # 尝试不同的编码读取文件以计算行数
+            encodings = ['utf-8', 'utf-8-sig', 'gbk', 'gb18030', 'latin1']
+            file_total_lines = None
+            
+            for encoding in encodings:
+                try:
+                    file_total_lines = sum(1 for _ in open(file_path, 'r', encoding=encoding)) - 1  # 减去表头
+                    Logger.info(f"使用编码 {encoding} 成功读取文件")
+                    break
+                except UnicodeDecodeError:
+                    continue
+            
+            if file_total_lines is None:
+                raise ValueError(f"无法使用支持的编码读取文件: {encodings}")
+        
+            if end_pos:
+                file_total_lines = min(file_total_lines, end_pos)
+        except Exception as e:
+            Logger.error(f"计算文件行数时出错: {str(e)}")
+            raise
         
         # 加载处理进度
         current_pos = start_pos - 1
