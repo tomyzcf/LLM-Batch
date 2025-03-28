@@ -80,6 +80,35 @@ python data_converter.py --guide
 - 异常值检测
 - 生成质量报告
 
+### 5. ID匹配工具 (id_matching.py)
+CSV文件ID匹配比对工具：
+- 比较两个目录中CSV文件的ID字段
+- 输出匹配和未匹配的数据
+- 支持自定义匹配列
+- 生成详细的匹配统计报告
+- 支持大文件处理
+
+使用示例：
+```bash
+# 显示帮助信息
+python id_matching.py -h
+
+# 使用默认配置运行
+python id_matching.py
+
+# 指定参考目录和待检查目录
+python id_matching.py -r "参考目录路径" -c "待检查目录路径" -o "结果输出目录路径"
+
+# 指定匹配列（使用第二列进行匹配）
+python id_matching.py -rk 1 -ck 1
+
+# 同时输出匹配和未匹配的数据
+python id_matching.py --matched
+
+# 组合使用多个参数
+python id_matching.py -r "参考目录" -c "待检查目录" -o "结果目录" -rk 2 -ck 1 --matched
+```
+
 ## 性能优化参数
 所有工具都支持以下性能优化参数：
 ```bash

@@ -37,6 +37,35 @@ Data quality checking tool:
 - Anomaly detection
 - Quality report generation
 
+### 5. ID Matching Tool (id_matching.py)
+CSV file ID matching and comparison tool:
+- Compare ID fields between CSV files in two directories
+- Output matched and unmatched data
+- Support for custom matching columns
+- Generate detailed matching statistics report
+- Large file processing support
+
+Usage examples:
+```bash
+# Show help information
+python id_matching.py -h
+
+# Run with default configuration
+python id_matching.py
+
+# Specify reference and check directories
+python id_matching.py -r "reference_dir" -c "check_dir" -o "output_dir"
+
+# Specify matching columns (use second column for matching)
+python id_matching.py -rk 1 -ck 1
+
+# Output both matched and unmatched data
+python id_matching.py --matched
+
+# Combined usage with multiple parameters
+python id_matching.py -r "reference_dir" -c "check_dir" -o "result_dir" -rk 2 -ck 1 --matched
+```
+
 ## Performance Parameters
 All tools support the following performance optimization parameters:
 ```bash
