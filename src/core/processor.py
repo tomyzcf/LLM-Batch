@@ -6,6 +6,8 @@ from tqdm import tqdm
 import datetime
 import csv
 import shutil
+import pandas as pd
+import re
 
 from ..utils.logger import Logger
 from ..utils.config import Config
@@ -119,17 +121,37 @@ class BatchProcessor:
         
         # 获取总行数和剩余行数
         try:
-            # 尝试不同的编码读取文件以计算行数
-            encodings = ['utf-8', 'utf-8-sig', 'gbk', 'gb18030', 'latin1']
+            # 根据文件类型选择不同的行数计算方法
+            ext = file_path.suffix.lower()
             file_total_lines = None
             
-            for encoding in encodings:
-                try:
-                    file_total_lines = sum(1 for _ in open(file_path, 'r', encoding=encoding)) - 1  # 减去表头
-                    Logger.info(f"使用编码 {encoding} 成功读取文件")
-                    break
-                except UnicodeDecodeError:
-                    continue
+            if ext == '.json':
+                # JSON文件通常一行一条记录
+                encodings = ['utf-8', 'utf-8-sig', 'gbk', 'gb18030', 'latin1']
+                for encoding in encodings:
+                    try:
+                        file_total_lines = sum(1 for _ in open(file_path, 'r', encoding=encoding))
+                        Logger.info(f"使用编码 {encoding} 成功读取JSON文件")
+                        break
+                    except UnicodeDecodeError:
+                        continue
+            elif ext in ['.csv', '.xlsx', '.xls']:
+                # CSV和Excel文件需要考虑表头
+                encodings = ['utf-8', 'utf-8-sig', 'gbk', 'gb18030', 'latin1']
+                for encoding in encodings:
+                    try:
+                        if ext == '.csv':
+                            file_total_lines = sum(1 for _ in open(file_path, 'r', encoding=encoding)) - 1  # 减去表头
+                        else:
+                            # Excel文件使用pandas读取行数
+                            file_total_lines = len(pd.read_excel(file_path)) 
+                        Logger.info(f"使用编码 {encoding} 成功读取文件")
+                        break
+                    except UnicodeDecodeError:
+                        continue
+                    except Exception as excel_e:
+                        Logger.error(f"读取Excel文件出错: {str(excel_e)}")
+                        raise
             
             if file_total_lines is None:
                 raise ValueError(f"无法使用支持的编码读取文件: {encodings}")
@@ -280,53 +302,66 @@ class BatchProcessor:
                                     # 尝试解析JSON字符串
                                     if isinstance(result, str):
                                         try:
-                                            # 标准JSON解析
-                                            result_dict = json.loads(result)
-                                            if isinstance(result_dict, list):
-                                                result_dict = result_dict[0] if result_dict else {}
-                                            
-                                            if isinstance(result_dict, dict):
-                                                stats['success'] += 1
-                                                with open(raw_file, 'a', encoding='utf-8') as f:
-                                                    json.dump(result_dict, f, ensure_ascii=False)
-                                                    f.write('\n')
-                                                
-                                                if output_headers is None and result_dict:
-                                                    output_headers = list(result_dict.keys())
-                                                    if not output_file.exists():
-                                                        with open(output_file, 'w', encoding='utf-8-sig', newline='') as f:
-                                                            writer = csv.DictWriter(f, fieldnames=output_headers)
-                                                            writer.writeheader()
-                                                
-                                                with open(output_file, 'a', encoding='utf-8-sig', newline='') as f:
-                                                    writer = csv.DictWriter(f, fieldnames=output_headers)
-                                                    writer.writerow(result_dict)
-                                                continue
-                                        except json.JSONDecodeError as je:
-                                            # JSON解析失败，记录错误
-                                            stats['json_error'] += 1
-                                            Logger.error(f"解析结果为JSON失败: {str(je)}")
-                                            Logger.error(f"原始内容: {result[:200]}...")
-                                            
-                                            # 记录失败，但继续处理下一条
-                                            if file_path.suffix.lower() == '.csv':
-                                                with open(error_file, 'a', encoding='utf-8') as f:
-                                                    f.write(f"{item['content']},JSON解析错误\n")
-                                            else:
+                                            # 检查是否为Markdown代码块格式的JSON
+                                            json_pattern = r'```(?:json)?\s*(.*?)\s*```'
+                                            md_json_match = re.search(json_pattern, result, re.DOTALL)
+                                            if md_json_match:
+                                                # 如果匹配到Markdown代码块，提取其中的JSON内容
+                                                json_content = md_json_match.group(1).strip()
                                                 try:
-                                                    error_data = json.loads(item['content'])
-                                                    error_data['error_type'] = 'JSON解析错误'
-                                                    error_data['error_details'] = str(je)
-                                                    with open(error_file, 'a', encoding='utf-8') as f:
-                                                        json.dump(error_data, f, ensure_ascii=False)
+                                                    result_dict = json.loads(json_content)
+                                                    stats['success'] += 1
+                                                    with open(raw_file, 'a', encoding='utf-8') as f:
+                                                        json.dump(result_dict, f, ensure_ascii=False)
                                                         f.write('\n')
-                                                except:
-                                                    Logger.error(f"无法解析原始内容为JSON: {item['content'][:100]}...")
+                                                    
+                                                    if output_headers is None and result_dict:
+                                                        output_headers = list(result_dict.keys())
+                                                        if not output_file.exists():
+                                                            with open(output_file, 'w', encoding='utf-8-sig', newline='') as f:
+                                                                writer = csv.DictWriter(f, fieldnames=output_headers)
+                                                                writer.writeheader()
+                                                        
+                                                    with open(output_file, 'a', encoding='utf-8-sig', newline='') as f:
+                                                        writer = csv.DictWriter(f, fieldnames=output_headers)
+                                                        writer.writerow(result_dict)
+                                                    continue
+                                                except json.JSONDecodeError as je:
+                                                    Logger.error(f"解析Markdown代码块中的JSON失败: {str(je)}")
+                                                    Logger.error(f"代码块内容: {json_content[:200]}...")
+                                                    # 继续尝试其他解析方法
+                                            
+                                            # 标准JSON解析
+                                            try:
+                                                result_dict = json.loads(result)
+                                                if isinstance(result_dict, list):
+                                                    result_dict = result_dict[0] if result_dict else {}
+                                                
+                                                if isinstance(result_dict, dict):
+                                                    stats['success'] += 1
+                                                    with open(raw_file, 'a', encoding='utf-8') as f:
+                                                        json.dump(result_dict, f, ensure_ascii=False)
+                                                        f.write('\n')
+                                                    
+                                                    if output_headers is None and result_dict:
+                                                        output_headers = list(result_dict.keys())
+                                                        if not output_file.exists():
+                                                            with open(output_file, 'w', encoding='utf-8-sig', newline='') as f:
+                                                                writer = csv.DictWriter(f, fieldnames=output_headers)
+                                                                writer.writeheader()
+                                                        
+                                                    with open(output_file, 'a', encoding='utf-8-sig', newline='') as f:
+                                                        writer = csv.DictWriter(f, fieldnames=output_headers)
+                                                        writer.writerow(result_dict)
+                                                    continue
+                                            except Exception as e:
+                                                stats['other_error'] += 1
+                                                Logger.error(f"处理结果时出错: {str(e)}")
+                                                continue
+                                        except Exception as e:
+                                            stats['other_error'] += 1
+                                            Logger.error(f"处理结果时出错: {str(e)}")
                                             continue
-                                    
-                                    # 如果不是有效的JSON或字典，记录为错误
-                                    stats['json_error'] += 1
-                                    Logger.error(f"结果既不是字典也不是有效JSON: {result[:100]}...")
                                 except Exception as e:
                                     stats['other_error'] += 1
                                     Logger.error(f"处理结果时出错: {str(e)}")
