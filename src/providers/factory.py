@@ -2,6 +2,10 @@ from typing import Dict, Any
 from .base import BaseProvider
 from .aliyun import AliyunProvider
 try:
+    from .aliyun_agent import AliyunAgentProvider
+except ImportError:
+    AliyunAgentProvider = None
+try:
     from .deepseek import DeepSeekProvider as DeepseekProvider
 except ImportError:
     DeepseekProvider = None
@@ -34,6 +38,7 @@ class ProviderFactory:
         """
         providers = {
             'aliyun': AliyunProvider,
+            'aliyun-agent': AliyunAgentProvider,
             'deepseek': DeepseekProvider,
             'openai': OpenAIProvider,
             'volcengine': VolcengineProvider

@@ -57,16 +57,20 @@ class AliyunProvider(BaseProvider):
                         content = result['choices'][0]['message']['content']
                         # 提取JSON字符串并解析
                         try:
-                            import re
                             import json
-                            # 使用正则表达式提取JSON部分
-                            json_match = re.search(r'\{.*\}', content, re.DOTALL)
-                            if json_match:
-                                json_str = json_match.group()
-                                return json.loads(json_str)
+                            
+                            # 尝试直接解析整个内容
+                            try:
+                                return json.loads(content)
+                            except json.JSONDecodeError as e:
+                                # 记录错误但不中断流程
+                                Logger.error(f"JSON解析失败: {str(e)}")
+                                # 返回原始内容，让处理器决定如何处理
+                                return content
                         except Exception as e:
-                            Logger.error(f"解析LLM返回的JSON失败: {str(e)}")
-                            return None
+                            Logger.error(f"处理返回内容时出错: {str(e)}")
+                            # 在出错时仍然返回原始内容，避免中断流程
+                            return content
                     return None
                 elif response.status in [429, 503]:
                     if retry_count < self.max_retries:

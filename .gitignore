@@ -39,6 +39,8 @@ outputData/*
 !inputData/.gitkeep
 !outputData/.gitkeep
 config/config.yaml
+/projects
+
 
 # System
 .DS_Store

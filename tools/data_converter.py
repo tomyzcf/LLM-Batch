@@ -302,14 +302,42 @@ def read_excel(file_path: str, **kwargs) -> pd.DataFrame:
     try:
         logger.info(f"正在读取Excel文件: {file_path}")
         
-        # 读取Excel文件
-        df = pd.read_excel(file_path, **kwargs)
+        # 根据文件扩展名确定引擎
+        engine = kwargs.pop('engine', None)
+        if engine is None:
+            if file_path.lower().endswith('.xlsx'):
+                engine = 'openpyxl'
+            elif file_path.lower().endswith('.xls'):
+                engine = 'xlrd'
+            else:
+                # 默认使用openpyxl
+                engine = 'openpyxl'
+        
+        try:
+            # 尝试读取Excel文件
+            df = pd.read_excel(file_path, engine=engine, **kwargs)
+        except ValueError as ve:
+            if "Excel file format cannot be determined" in str(ve) and engine == 'openpyxl':
+                # 尝试使用其他引擎
+                logger.warning(f"尝试使用xlrd引擎读取文件: {file_path}")
+                try:
+                    df = pd.read_excel(file_path, engine='xlrd', **kwargs)
+                except Exception:
+                    # 如果xlrd也失败，尝试使用odf引擎（Open Document格式）
+                    logger.warning(f"尝试使用odf引擎读取文件: {file_path}")
+                    df = pd.read_excel(file_path, engine='odf', **kwargs)
+            else:
+                raise
         
         logger.info(f"成功读取Excel文件: {file_path}, 共 {len(df)} 行数据")
         return df
     
     except Exception as e:
         logger.error(f"读取Excel文件时出错: {str(e)}")
+        # 添加更详细的错误信息以帮助诊断
+        if "No module named" in str(e):
+            missing_module = str(e).split("'")[1]
+            logger.error(f"缺少必要的模块: {missing_module}，请使用pip安装: pip install {missing_module}")
         raise
 
 def read_parquet(file_path: str) -> pd.DataFrame:
@@ -477,7 +505,79 @@ def write_parquet(df: pd.DataFrame, file_path: str, **kwargs):
         logger.error(f"写入Parquet文件时出错: {str(e)}")
         raise
 
-# 主要转换函数
+def check_excel_file(file_path: str) -> bool:
+    """
+    检查Excel文件是否可读并尝试修复
+    返回True表示文件可读，False表示无法读取
+    """
+    logger.info(f"检查Excel文件: {file_path}")
+    
+    try:
+        # 尝试使用不同引擎读取文件头部数据
+        engines = ['openpyxl', 'xlrd', 'odf']
+        for engine in engines:
+            try:
+                pd.read_excel(file_path, engine=engine, nrows=5)
+                logger.info(f"文件 {file_path} 可用引擎 {engine} 正常读取")
+                return True
+            except Exception as e:
+                logger.warning(f"使用引擎 {engine} 读取 {file_path} 失败: {str(e)}")
+        
+        # 尝试修复格式问题
+        # 1. 检查是否为自动备份文件(以~$开头)
+        file_name = Path(file_path).name
+        if file_name.startswith('~$'):
+            logger.warning(f"文件 {file_path} 似乎是临时备份文件，尝试查找原始文件")
+            original_file = str(Path(file_path).parent / file_name[2:])
+            if Path(original_file).exists():
+                logger.info(f"找到可能的原始文件: {original_file}")
+                return check_excel_file(original_file)
+        
+        # 2. 检查文件是否为压缩的ZIP格式（大多数.xlsx文件本质是ZIP）
+        import zipfile
+        try:
+            with zipfile.ZipFile(file_path) as zf:
+                # 检查是否包含Excel文件的标准结构
+                if '[Content_Types].xml' in zf.namelist():
+                    logger.info(f"文件 {file_path} 是有效的ZIP压缩格式，但Excel结构可能损坏")
+        except zipfile.BadZipFile:
+            logger.warning(f"文件 {file_path} 不是有效的XLSX格式")
+        
+        # 3. 尝试复制到临时文件再读取
+        import shutil
+        import tempfile
+        
+        temp_dir = tempfile.mkdtemp()
+        temp_file = os.path.join(temp_dir, Path(file_path).name)
+        try:
+            shutil.copy2(file_path, temp_file)
+            logger.info(f"已复制文件到临时位置: {temp_file}")
+            
+            # 尝试读取
+            for engine in engines:
+                try:
+                    pd.read_excel(temp_file, engine=engine, nrows=5)
+                    logger.info(f"临时文件可用引擎 {engine} 正常读取")
+                    # 如果成功，替换原文件
+                    shutil.copy2(temp_file, file_path)
+                    logger.info(f"已用可读取的临时文件替换原文件")
+                    return True
+                except Exception:
+                    pass
+        finally:
+            # 清理临时文件
+            try:
+                shutil.rmtree(temp_dir)
+            except:
+                pass
+        
+        logger.error(f"所有尝试失败，无法读取Excel文件: {file_path}")
+        return False
+    
+    except Exception as e:
+        logger.error(f"检查Excel文件时发生错误: {str(e)}")
+        return False
+
 def convert_file(input_file: str, output_file: str, batch_size: int = BATCH_SIZE):
     """
     根据文件扩展名自动转换文件格式
@@ -494,6 +594,11 @@ def convert_file(input_file: str, output_file: str, batch_size: int = BATCH_SIZE
         
         logger.info(f"正在转换文件: {input_file} ({input_format}) -> {output_file} ({output_format})")
         
+        # 对Excel文件进行额外检查
+        if input_format == 'excel' and not check_excel_file(input_file):
+            logger.warning(f"跳过无法读取的Excel文件: {input_file}")
+            return
+            
         # 读取输入文件
         df = None
         if input_format == 'json':
@@ -604,9 +709,65 @@ Notes:
 """
     print(guide)
 
+def check_dependencies():
+    """检查并尝试安装必要的依赖库"""
+    required_packages = {
+        'openpyxl': '读取.xlsx文件',
+        'xlrd': '读取.xls文件',
+        'odf': '读取OpenDocument格式',
+        'pyarrow': 'Parquet文件支持',
+        'pandas': '数据处理',
+        'chardet': '字符编码检测',
+        'ijson': 'JSON流处理',
+        'bs4': 'HTML处理'
+    }
+    
+    missing_packages = []
+    
+    for package, purpose in required_packages.items():
+        try:
+            __import__(package)
+        except ImportError:
+            missing_packages.append((package, purpose))
+    
+    if missing_packages:
+        logger.warning("检测到缺少以下依赖库:")
+        for package, purpose in missing_packages:
+            logger.warning(f"  - {package}: {purpose}")
+        
+        logger.info("尝试自动安装缺失的依赖...")
+        import subprocess
+        import sys
+        
+        for package, _ in missing_packages:
+            try:
+                logger.info(f"正在安装 {package}...")
+                subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+                logger.info(f"{package} 安装成功")
+            except Exception as e:
+                logger.error(f"安装 {package} 失败: {str(e)}")
+                logger.error(f"请手动安装: pip install {package}")
+        
+        # 检查是否所有包都已成功安装
+        still_missing = []
+        for package, purpose in missing_packages:
+            try:
+                __import__(package)
+            except ImportError:
+                still_missing.append((package, purpose))
+        
+        if still_missing:
+            logger.error("仍然缺少以下依赖库，某些功能可能无法使用:")
+            for package, purpose in still_missing:
+                logger.error(f"  - {package}: {purpose}")
+            logger.error("请手动安装这些包: pip install " + " ".join(package for package, _ in still_missing))
+
 def main():
     """命令行入口函数"""
     global MEMORY_THRESHOLD, BUFFER_SIZE
+    
+    # 检查依赖
+    check_dependencies()
     
     parser = argparse.ArgumentParser(
         description='Data Format Converter - Convert between JSON, CSV, Excel and Parquet formats',
@@ -645,7 +806,7 @@ Supported formats:
     
     # 全局选项
     parser.add_argument('--memory-threshold', type=int, default=MEMORY_THRESHOLD, 
-                       help='Memory usage warning threshold, default: ' + str(MEMORY_THRESHOLD) + '%')
+                       help='Memory usage warning threshold, default: ' + str(MEMORY_THRESHOLD) + '%%')
     parser.add_argument('--buffer-size', type=int, default=BUFFER_SIZE, 
                        help='File buffer size, default: ' + str(BUFFER_SIZE//1024) + 'KB')
     parser.add_argument('-v', '--version', action='version', version='Data Converter v1.0.0',
