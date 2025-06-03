@@ -2,10 +2,10 @@
 # 使用时请复制为 config.yaml 并修改相应配置
 # 目前支持LLM和Agent两类供应商。LLM的配置兼容OpenAI风格可以调整或创建多个，但是Agent比较特殊，不要轻易修改。
 
-default_provider: "aliyun-llm" 
+default_provider: "LLM" 
 
 # API提供商配置
-LLM:
+api_providers:
   ## 通用LLM API配置，这里以阿里百炼示例
   LLM:
     api_key: "your-aliyun-api-key-here"

@@ -9,7 +9,7 @@ import shutil
 import pandas as pd
 import re
 
-from ..utils.logger import Logger
+from ..utils.logger import Logger, DEFAULT_LOG_CONFIG
 from ..utils.config import Config
 from ..utils.file_utils import FileProcessor
 from ..providers.base import BaseProvider
@@ -210,7 +210,7 @@ class BatchProcessor:
             output_headers = None
             
             # 创建进度条，使用剩余行数
-            progress_config = self.config.logging_config.get('progress', {})
+            progress_config = DEFAULT_LOG_CONFIG.get('progress', {})
             if progress_config.get('show_progress_bar', True):
                 pbar = tqdm(
                     total=remaining_lines,

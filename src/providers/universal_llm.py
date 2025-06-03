@@ -133,13 +133,29 @@ class UniversalLLMProvider(BaseProvider):
             # 提取LLM返回的内容
             content = result['choices'][0]['message']['content']
             
-            # 尝试解析为JSON
+            # 首先尝试检查是否是Markdown代码块格式
+            import re
+            json_pattern = r'```(?:json)?\s*(.*?)\s*```'
+            md_json_match = re.search(json_pattern, content, re.DOTALL)
+            
+            if md_json_match:
+                # 如果是Markdown代码块，提取其中的JSON内容
+                json_content = md_json_match.group(1).strip()
+                try:
+                    return json.loads(json_content)
+                except json.JSONDecodeError as e:
+                    Logger.error(f"Markdown代码块中的JSON解析失败: {str(e)}")
+                    Logger.error(f"代码块内容: {json_content[:200]}...")
+                    return None
+            
+            # 然后尝试直接解析为JSON
             try:
                 return json.loads(content)
             except json.JSONDecodeError as e:
                 Logger.error(f"JSON解析失败: {str(e)}")
-                # 返回原始内容，让上层处理器决定如何处理
-                return content
+                # 记录原始内容以便调试
+                Logger.debug(f"原始响应内容: {content[:200]}...")
+                return None
                 
         except Exception as e:
             Logger.error(f"处理返回内容时出错: {str(e)}")
