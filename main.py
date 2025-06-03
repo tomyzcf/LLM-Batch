@@ -51,9 +51,6 @@ async def main():
         # 加载配置
         config = Config()
         
-        # 设置日志级别
-        Logger.set_level(config.logging_config.get('level', 'INFO'))
-        
         # 解析字段参数
         fields = parse_fields(args.fields) if args.fields else None
         

@@ -45,11 +45,6 @@ class Config:
         return self.config.get('output', {})
         
     @property
-    def logging_config(self) -> Dict[str, Any]:
-        """获取日志配置"""
-        return self.config.get('logging', {})
-        
-    @property
     def process_config(self) -> Dict[str, Any]:
         """获取处理配置"""
         return self.config.get('process', {}) 

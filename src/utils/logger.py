@@ -2,7 +2,23 @@ import logging
 import sys
 from pathlib import Path
 from typing import Optional
-from ..utils.config import Config
+
+# 默认日志配置
+DEFAULT_LOG_CONFIG = {
+    'level': 'INFO',
+    'console_output': True,
+    'file_output': True,
+    'format': '%(asctime)s [%(levelname)s] %(message)s',
+    'date_format': '%Y-%m-%d %H:%M:%S',
+    'encoding': 'utf-8',
+    'stats_interval': 100,
+    'progress': {
+        'show_progress_bar': True,
+        'update_interval': 0.1,
+        'bar_format': '{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]',
+        'show_speed': True
+    }
+}
 
 class Logger:
     """日志工具类"""
@@ -16,8 +32,8 @@ class Logger:
     
     def _setup_logger(self):
         """设置日志配置"""
-        config = Config()
-        log_config = config.logging_config
+        # 使用默认日志配置
+        log_config = DEFAULT_LOG_CONFIG
         
         self.logger = logging.getLogger('BatchProcessor')
         self.logger.setLevel(getattr(logging, log_config.get('level', 'INFO').upper()))
@@ -37,7 +53,7 @@ class Logger:
             self.logger.addHandler(console_handler)
         
         self.show_progress = log_config.get('show_progress', True)
-        self.stats_interval = log_config.get('stats_interval', 1)
+        self.stats_interval = log_config.get('stats_interval', 100)
     
     @staticmethod
     def set_level(level: str):
@@ -64,8 +80,7 @@ class Logger:
     def set_log_file(log_file: Path):
         """设置日志文件"""
         instance = Logger()
-        config = Config()
-        log_config = config.logging_config
+        log_config = DEFAULT_LOG_CONFIG
         
         # 如果不需要文件输出，直接返回
         if not log_config.get('file_output', True):
