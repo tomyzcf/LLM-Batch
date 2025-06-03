@@ -32,7 +32,7 @@ class Config:
     @property
     def default_provider(self) -> str:
         """获取默认API提供商"""
-        return self.config.get('default_provider', 'deepseek')
+        return self.config.get('default_provider', 'aliyun')
             
     @property
     def api_providers(self) -> Dict[str, Dict[str, Any]]:

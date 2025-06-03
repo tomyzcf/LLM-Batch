@@ -1,45 +1,57 @@
 # LLM批处理工具配置文件示例
-# 使用时请复制为 config.yaml 并修改相应配置
-# 目前支持LLM和Agent两类供应商。LLM的配置兼容OpenAI风格可以调整或创建多个，但是Agent比较特殊，不要轻易修改。
+# 使用前请将此文件复制为 config.yaml 并修改相应配置
 
-default_provider: "LLM" 
+# 默认使用的API提供商（必须是下面api_providers中定义的名称之一）
+default_provider: "deepseek"
 
 # API提供商配置
 api_providers:
-  ## 通用LLM API配置，这里以阿里百炼示例
-  LLM:
-    api_key: "your-aliyun-api-key-here"
-    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    model: "qwen-plus"
-    concurrent_limit: 5
-    model_params:
-      temperature: 0.7
-      top_p: 0.8
-      max_tokens: 2000
-      
-  ## 阿里云百炼Agent API配置
+  
+  # === LLM兼容API配置示例 ===
+  # 适用于所有支持OpenAI格式的API服务
+  
+  ## DeepSeek（性价比高，推荐）
+  deepseek:
+    api_type: "llm_compatible"          # API类型：LLM兼容
+    api_key: "sk-your-deepseek-key-here"  # 替换为你的API密钥
+    base_url: "https://api.deepseek.com"
+    model: "deepseek-chat"              # 模型名称
+    concurrent_limit: 5                 # 并发请求数限制
+    model_params:                       # 模型参数（可选）
+      temperature: 0.7                  # 创造性参数 (0-1)
+      max_tokens: 4000                  # 最大输出长度
+  
+  # === 专用Agent API配置示例 ===
+  # 仅适用于特定的智能体服务
+  
+  ## 阿里云百炼Agent（需要创建应用获取app_id）
   aliyun-agent:
-    api_key: "your-aliyun-api-key-here"
+    api_type: "aliyun_agent"            # API类型：阿里云Agent
+    api_key: "sk-your-aliyun-key-here"  # 替换为你的API密钥
     base_url: "https://dashscope.aliyuncs.com"
-    app_id: "your-app-id-here"
-    concurrent_limit: 20
+    app_id: "your-app-id-here"          # 替换为你的应用ID
+    concurrent_limit: 10                # Agent通常支持更高并发
 
 # 输出配置
 output:
-  # 输出格式：支持 csv, excel, json
-  format: "csv"
-  # 是否保存原始API响应
-  save_raw_response: true
-  # 输出文件编码
-  encoding: "utf-8-sig"
+  format: "csv"                         # 输出格式：csv/excel/json
+  save_raw_response: true               # 是否保存API原始响应
+  encoding: "utf-8-sig"                 # 文件编码（支持Excel中文显示）
 
-# 处理配置
+# 批处理配置
 process:
-  # 批处理大小（同时处理的记录数）
-  batch_size: 5
-  # 最大重试次数
-  max_retries: 5
-  # 重试间隔（秒）
-  retry_interval: 0.5
-  # 内存使用率上限（百分比）
-  max_memory_percent: 80 
+  batch_size: 5                         # 每批处理的记录数
+  max_retries: 3                        # 失败时最大重试次数
+  retry_interval: 1                     # 重试间隔（秒）
+  max_memory_percent: 80                # 内存使用率上限
+
+# === 配置说明 ===
+# 1. api_type 字段说明：
+#    - llm_compatible: 适用于所有OpenAI格式兼容的API
+#    - aliyun_agent: 专用于阿里云百炼Agent服务
+#    - 如果不指定，系统会根据配置字段自动检测
+#
+# 2. 快速开始：
+#    - 只需配置一个API提供商即可开始使用
+#    - 推荐使用DeepSeek进行测试（性价比高）
+#    - 并发限制建议：DeepSeek 5-10，Agent服务 10-20 

@@ -16,9 +16,12 @@ LLM-Batch 是一个专业的批处理工具，旨在帮助用户高效地使用�
 - **编码自动检测**：支持多种文件编码格式
 
 ### API提供商支持
-- **OpenAI风格API**：支持deepseek,阿里百炼，火山等openai风格模型接口
-- **阿里百炼agent**：阿里百炼Agent API 接口
-- **扩展性**：易于添加新的API提供商
+- **LLM兼容API** (`api_type: "llm_compatible"`)：支持所有OpenAI兼容的API接口
+  - DeepSeek、OpenAI、阿里云百炼、火山引擎等
+- **阿里云百炼Agent** (`api_type: "aliyun_agent"`)：专门的Agent API接口
+- **统一配置管理**：通过 `api_type` 字段统一管理不同类型的API
+- **自动类型检测**：未指定 `api_type` 时自动根据配置字段检测
+- **高度可扩展**：易于添加新的API类型和提供商
 
 ### 输出与日志
 - **多种输出格式**：CSV、Excel、JSON
@@ -41,9 +44,9 @@ LLM-Batch 是一个专业的批处理工具，旨在帮助用户高效地使用�
 ├── src/                      # 源代码
 │   ├── providers/           # API提供商实现
 │   │   ├── base.py         # 基础提供商接口
-│   │   ├── universal_llm.py # 通用LLM提供商
-│   │   ├── aliyun_agent.py # 阿里云特殊提供商
-│   │   └── factory.py      # 提供商工厂
+│   │   ├── universal_llm.py # LLM兼容API提供商
+│   │   ├── aliyun_agent.py # 阿里云Agent提供商
+│   │   └── factory.py      # 提供商工厂（统一管理）
 │   ├── core/               # 核心处理逻辑
 │   │   └── processor.py    # 批处理器
 │   └── utils/              # 工具类
@@ -52,7 +55,7 @@ LLM-Batch 是一个专业的批处理工具，旨在帮助用户高效地使用�
 │       └── file_utils.py   # 文件处理工具
 ├── config/                  # 配置文件
 │   ├── config.yaml         # 主配置文件
-│   └── config.example.yaml # 配置示例文件
+│   └── config.example.yaml # 配置示例文件（简化版）
 ├── inputData/              # 输入数据目录
 ├── outputData/             # 输出数据目录
 ├── prompts/                # 提示词模板文件
@@ -92,7 +95,28 @@ pip install -r requirements.txt
 copy config\config.example.yaml config\config.yaml
 ```
 
-2. 编辑 `config\config.yaml` 文件，设置您的API密钥和其他配置
+2. 编辑 `config\config.yaml` 文件，设置您的API密钥和配置：
+
+```yaml
+# 支持的api_type类型：
+# - llm_compatible: 适用于所有OpenAI兼容的API
+# - aliyun_agent: 阿里云百炼Agent专用API
+
+api_providers:
+  # LLM兼容API示例（推荐）
+  deepseek:
+    api_type: "llm_compatible"  # 指定API类型
+    api_key: "sk-your-deepseek-key-here"
+    base_url: "https://api.deepseek.com"
+    model: "deepseek-chat"
+    
+  # 阿里云Agent示例  
+  aliyun-agent:
+    api_type: "aliyun_agent"  # 指定API类型
+    api_key: "sk-your-aliyun-key-here"
+    base_url: "https://dashscope.aliyuncs.com"
+    app_id: "your-app-id"
+```
 
 3. 编辑 `prompts\example.txt` 文件，设置您的模型提示词
 
@@ -179,7 +203,15 @@ python main.py inputData/data.xlsx prompts/analyze.txt --fields 2-6
 ## ❓ 常见问题
 
 ### Q: 如何添加新的API提供商？
-A: 继承 `BaseProvider` 类并在 `factory.py` 中注册即可。
+A: 有两种方式：
+1. **添加新的API类型**：继承 `BaseProvider` 类创建新Provider，在 `factory.py` 中注册新的 `api_type`
+2. **使用现有类型**：如果是OpenAI兼容的API，直接使用 `api_type: "llm_compatible"` 即可
+
+### Q: api_type字段是必须的吗？
+A: 不是必须的。如果未指定，系统会根据配置字段自动检测：
+- 有 `app_id` 字段 → `aliyun_agent`
+- 有 `model` 字段 → `llm_compatible`
+- 默认 → `llm_compatible`
 
 ### Q: 处理大文件时内存不足怎么办？
 A: 调整配置中的 `batch_size` 和 `max_memory_percent` 参数。
