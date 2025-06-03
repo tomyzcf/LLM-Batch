@@ -1,22 +1,7 @@
 from typing import Dict, Any
 from .base import BaseProvider
-from .aliyun import AliyunProvider
-try:
-    from .aliyun_agent import AliyunAgentProvider
-except ImportError:
-    AliyunAgentProvider = None
-try:
-    from .deepseek import DeepSeekProvider as DeepseekProvider
-except ImportError:
-    DeepseekProvider = None
-try:
-    from .openai import OpenAIProvider
-except ImportError:
-    OpenAIProvider = None
-try:
-    from .volcengine import VolcengineProvider
-except ImportError:
-    VolcengineProvider = None
+from .universal_llm import UniversalLLMProvider
+from .aliyun_agent import AliyunAgentProvider
 from ..utils.logger import Logger
 
 class ProviderFactory:
@@ -36,24 +21,34 @@ class ProviderFactory:
         Raises:
             ValueError: 不支持的提供商类型
         """
-        providers = {
-            'aliyun': AliyunProvider,
-            'aliyun-agent': AliyunAgentProvider,
-            'deepseek': DeepseekProvider,
-            'openai': OpenAIProvider,
-            'volcengine': VolcengineProvider
+        # 通用LLM提供商（支持所有OpenAI兼容API）
+        universal_llm_providers = {
+            'aliyun': UniversalLLMProvider,
+            'deepseek': UniversalLLMProvider, 
+            'openai': UniversalLLMProvider,
+            'volcengine': UniversalLLMProvider
         }
+        
+        # 特殊提供商
+        special_providers = {
+            'aliyun-agent': AliyunAgentProvider,
+        }
+        
+        # 合并所有提供商映射
+        providers = {**universal_llm_providers, **special_providers}
         
         provider_class = providers.get(provider_type.lower())
         if provider_class is None:
-            if provider_type.lower() not in providers:
-                raise ValueError(f"不支持的API提供商类型: {provider_type}")
-            else:
-                raise ValueError(f"API提供商 {provider_type} 的实现未找到，请确保相关文件存在")
+            raise ValueError(f"不支持的API提供商类型: {provider_type}")
             
         if 'api_providers' not in config or provider_type not in config['api_providers']:
             raise ValueError(f"配置文件中缺少 {provider_type} 的API配置")
             
         provider_config = config['api_providers'][provider_type]
-        Logger.info(f"使用API提供商: {provider_type}")
+        
+        if provider_class == UniversalLLMProvider:
+            Logger.info(f"使用通用LLM提供商处理: {provider_type}")
+        else:
+            Logger.info(f"使用特殊提供商: {provider_type}")
+            
         return provider_class(provider_config) 
