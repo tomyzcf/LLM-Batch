@@ -4,7 +4,7 @@
 
 ## 🎯 项目简介
 
-LLM-Batch 是一个专业的批处理工具，旨在帮助用户高效地使用大语言模型处理各种类型的非结构化数据，将其转换为结构化信息，降低数据处理门槛，提升数据价值。
+LLM-Batch 是一个专业的批处理工具，旨在帮助用户高效地使用大语言模型处理各种类型的调用请求，包括不限于数据标签提取，批量智能体内容生成，模型/智能体效果评估
 
 ## 🌟 核心特性
 
@@ -16,10 +16,8 @@ LLM-Batch 是一个专业的批处理工具，旨在帮助用户高效地使用�
 - **编码自动检测**：支持多种文件编码格式
 
 ### API提供商支持
-- **阿里云通义千问**：支持 Qwen 系列模型
-- **DeepSeek**：支持 DeepSeek Chat 模型
-- **OpenAI**：支持 GPT 系列模型
-- **火山引擎**：支持火山方舟平台模型
+- **OpenAI风格API**：支持deepseek,阿里百炼，火山等openai风格模型接口
+- **阿里百炼agent**：阿里百炼Agent API 接口
 - **扩展性**：易于添加新的API提供商
 
 ### 输出与日志
@@ -94,7 +92,9 @@ pip install -r requirements.txt
 copy config\config.example.yaml config\config.yaml
 ```
 
-2. 编辑 `config/config.yaml` 文件，设置您的API密钥和其他配置
+2. 编辑 `config\config.yaml` 文件，设置您的API密钥和其他配置
+
+3. 编辑 `prompts\example.txt` 文件，设置您的模型提示词
 
 ### 3. 基本使用
 
@@ -130,105 +130,14 @@ python main.py inputData/data.csv prompts/extract.txt --provider aliyun
 python main.py inputData/data.xlsx prompts/analyze.txt --fields 2-6
 ```
 
-### 4. 提示词模板
-
-在 `prompts` 目录中创建提示词文件，格式示例：
-
-```
-[系统指令]
-你是一个专业的数据分析助手，擅长处理和分析各种类型的数据。
-
-[任务要求]
-请分析以下数据并提取关键信息：
-
-{输入数据}
-
-[输出格式]
-请严格按照以下JSON格式输出：
-{
-    "字段1": "字段1的描述",
-    "字段2": "字段2的描述",
-    "confidence": 0.95
-}
-```
-
-## ⚙️ 配置说明
-
-### API提供商配置
-配置文件支持以下API提供商：
-- **阿里云 (aliyun)**：通义千问API，支持多种模型
-- **DeepSeek (deepseek)**：高性价比的API选择
-- **OpenAI (openai)**：GPT系列模型支持
-- **火山引擎 (volcengine)**：字节跳动的大模型平台
-
-### 输出配置
-- 支持CSV、Excel、JSON格式输出
-- 可配置是否保存原始API响应
-- 自定义文件编码设置
-
-### 处理配置
-- 批处理大小控制
-- 重试次数和间隔设置
-- 内存使用限制
-- 并发请求数限制
-
-### 日志配置
-- 可配置日志级别和格式
-- 支持控制台和文件输出
-- 进度条和统计信息显示
-
 ## 🔧 实用工具
 
-项目包含多个实用工具，位于 `tools/` 目录：
-
-### 数据质量检查工具
-```bash
-python tools/data_quality_check.py <文件路径>
-```
-- 检查文件格式和编码
-- 分析数据质量指标
-- 生成详细的质量报告
-
-### CSV分割管理器
-```bash
-python tools/csv_splitter_manager.py <输入文件> --method rows --size 1000
-```
-- 按行数分割文件
-- 按文件大小分割
-- 按日期列分割
-- 随机分割
-
-### 数据转换工具
-```bash
-python tools/data_converter.py <输入文件> <输出格式>
-```
-- 支持多种格式之间的转换
-- 自动处理编码问题
-- 保持数据完整性
-
-### 成本计算器
-```bash
-python tools/token_cost_calculator.py <文件路径> <提示词文件>
-```
-- 估算处理成本
-- 支持多种模型的token计算
-- 提供详细的成本分析
-
-### JSON格式化工具
-```bash
-python tools/json_format.py <输入文件>
-```
-- 格式化JSON文件
-- 支持嵌套结构处理
-- 批量处理功能
-
-### CSV去重工具
-```bash
-python tools/dedup_csv.py <输入文件>
-```
-- 基于指定列去重
-- 保持数据完整性
-- 生成去重报告
+项目包含多个实用数据工具，位于 `tools/` 目录，详情请参考 tools/README.md
+- 数据质量检查工具
+- 数据去重工具
+- 数据分割工具
+- 数据格式转换工具
+- 模型API成本计算器
 
 ## 📋 最佳实践
 
