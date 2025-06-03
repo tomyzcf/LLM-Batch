@@ -11,7 +11,7 @@ api_providers:
     api_key: "your-aliyun-api-key-here"
     base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
     model: "qwen-plus"
-    concurrent_limit: 50
+    concurrent_limit: 5
     model_params:
       temperature: 0.7
       top_p: 0.8
@@ -36,7 +36,7 @@ output:
 # 处理配置
 process:
   # 批处理大小（同时处理的记录数）
-  batch_size: 20
+  batch_size: 5
   # 最大重试次数
   max_retries: 5
   # 重试间隔（秒）
