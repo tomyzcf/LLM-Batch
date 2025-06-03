@@ -21,16 +21,18 @@ import chardet
 from pathlib import Path
 import zipfile
 import re
+import numpy as np
+import datetime
 
 # 默认配置参数
 DEFAULT_CONFIG = {
-    "source_file": r"E:\Projects\leagle\inputData\tky\202504-品名申请信息.csv",     # 源文件路径 (包含要拼接的数据的文件)，支持Windows完整路径
-    "target_file": r"E:\Projects\leagle\inputData\tky\新增品名.csv",     # 目标文件路径 (要合并到的文件)，支持Windows完整路径
+    "source_file": r"E:\Projects\leagle\inputData\tky\1原始数据\1.铁路货物品已有品名库9886.csv",     # 源文件路径 (包含要拼接的数据的文件)，支持Windows完整路径
+    "target_file": r"E:\Projects\leagle\inputData\tky\3目标输出\finall\1结论处理结果_基于路局分类+原品名重新分类11699.xlsx",     # 目标文件路径 (要合并到的文件)，支持Windows完整路径
     "output_file": None,     # 输出文件路径，默认为当前目录下以目标文件名为前缀的结果文件
-    "source_key_column": 5,  # 源文件匹配键列索引（从0开始，0表示第1列）
-    "target_key_column": 2,  # 目标文件匹配键列索引（从0开始，0表示第1列）
-    "source_data_columns": [12,13],  # 源文件要拼接的数据列索引列表（从0开始，1表示第2列），多列用逗号分隔如 1,2,3
-    "output_format": "csv", # 输出文件格式：xlsx, csv
+    "source_key_column": 1,  # 源文件匹配键列索引（从0开始，0表示第1列）
+    "target_key_column": 9,  # 目标文件匹配键列索引（从0开始，0表示第1列）
+    "source_data_columns": [0],  # 源文件要拼接的数据列索引列表（从0开始，1表示第2列），多列用逗号分隔如 1,2,3
+    "output_format": "xlsx", # 输出文件格式：xlsx, csv
     "encoding": None,        # 文件编码，None表示启用自动检测编码
 }
 
@@ -68,8 +70,12 @@ def read_file(file_path, encoding=None):
                         print(f"警告: 文件 {file_path} 命名为Excel但不是有效的Excel格式，尝试其他方式读取...")
                         raise ValueError("无效的Excel文件")
                 
-                # 作为Excel读取
-                df = pd.read_excel(file_path, engine='openpyxl' if file_ext == '.xlsx' else None)
+                # 作为Excel读取，指定所有列为字符串类型
+                df = pd.read_excel(
+                    file_path, 
+                    engine='openpyxl' if file_ext == '.xlsx' else None,
+                    dtype=str  # 将所有列读取为字符串，保留前导零
+                )
                 print(f"成功读取Excel文件: {file_path}")
                 return df
             except Exception as e:
@@ -87,7 +93,12 @@ def read_file(file_path, encoding=None):
             for enc in encodings:
                 for delimiter in delimiters:
                     try:
-                        df = pd.read_csv(file_path, encoding=enc, sep=delimiter)
+                        df = pd.read_csv(
+                            file_path, 
+                            encoding=enc, 
+                            sep=delimiter,
+                            dtype=str  # 将所有列读取为字符串，保留前导零
+                        )
                         print(f"成功读取CSV文件: {file_path}，使用编码 {enc} 和分隔符 '{delimiter}'")
                         return df
                     except Exception:
@@ -136,6 +147,46 @@ def generate_default_output_path(target_file, output_format):
     output_path = Path(os.getcwd()) / f"{file_name}_merged.{output_format.lower()}"
     
     return str(output_path)
+
+def ensure_string(value):
+    """
+    确保任何类型的值都被转换为适当的字符串格式，
+    特别注意保留前导零
+    
+    特殊处理:
+    - NaN/None 值转为空字符串
+    - 数字格式保留原始表示，包括前导零
+    - 日期格式转为标准字符串
+    """
+    if pd.isna(value) or value is None:
+        return ''
+    
+    # 如果已经是字符串类型，直接返回，避免多次转换可能丢失前导零
+    if isinstance(value, str):
+        return value
+        
+    # 原始值转换为字符串，用于检查特殊格式
+    original_str = str(value).strip()
+    
+    # 检查是否是数字但实际表示为代码（有前导零）
+    if isinstance(value, (int, float, np.number)):
+        str_val = original_str
+        # 如果是整数，确保没有小数点
+        if isinstance(value, (int, np.integer)) or (isinstance(value, float) and value.is_integer()):
+            # 检查原始字符串是否有前导零，如果有则保留原始格式
+            if original_str.startswith('0') and len(original_str) > 1:
+                return original_str
+            # 否则返回整数格式
+            return str(int(value))
+        # 浮点数返回原始字符串表示
+        return str_val
+    
+    # 处理日期时间
+    if isinstance(value, (datetime.date, datetime.datetime)):
+        return value.strftime('%Y-%m-%d %H:%M:%S')
+    
+    # 其他类型直接转字符串
+    return original_str
 
 def merge_data_files(source_file, target_file, source_key_col=0, target_key_col=0, 
                     source_data_cols=None, output_file=None, output_format='xlsx', encoding=None):
@@ -207,6 +258,9 @@ def merge_data_files(source_file, target_file, source_key_col=0, target_key_col=
     print(f"匹配键 - 源文件: {source_key_column}(索引:{source_key_col})，目标文件: {target_key_column}(索引:{target_key_col})")
     print(f"数据列 - 源文件: {source_data_column_names}(索引:{source_data_cols})")
     
+    # 注意：我们已经在读取时设置了dtype=str，所以这里不需要再转换了
+    print("数据已以字符串格式读取，保留前导零")
+    
     # 创建结果DataFrame
     df_result = df_target.copy()
     
@@ -214,18 +268,22 @@ def merge_data_files(source_file, target_file, source_key_col=0, target_key_col=
     source_data_dict = {}
     for _, row in df_source.iterrows():
         key = row[source_key_column]
-        if pd.notna(key):  # 只处理非空键
-            # 转换为字符串以便于比较
-            str_key = str(key).strip()
-            if str_key not in source_data_dict:
+        if pd.notna(key) and key != 'nan':  # 只处理非空键且不为'nan'的情况
+            # 使用原始键作为字符串进行匹配（已经是字符串了，保留了前导零）
+            str_key = key.strip()
+            if str_key and str_key not in source_data_dict:
                 source_data_dict[str_key] = {}
             
             # 收集每个要拼接的数据列的值
             for col_idx, col_name in zip(source_data_cols, source_data_column_names):
-                if col_name not in source_data_dict[str_key]:
-                    source_data_dict[str_key][col_name] = []
-                value = row[col_name]
-                source_data_dict[str_key][col_name].append(value)
+                if str_key:
+                    # 确保字典中有此列的列表
+                    if col_name not in source_data_dict[str_key]:
+                        source_data_dict[str_key][col_name] = []
+                    
+                    # 添加值（直接使用读取的字符串值）
+                    value = row[col_name]  # 已经是字符串了，保留了前导零
+                    source_data_dict[str_key][col_name].append(value)
     
     # 计数器
     total_matches = 0
@@ -240,9 +298,9 @@ def merge_data_files(source_file, target_file, source_key_col=0, target_key_col=
     for idx, row in df_result.iterrows():
         target_key = row[target_key_column]
         
-        if pd.notna(target_key):
-            # 转换为字符串以便于比较
-            str_target_key = str(target_key).strip()
+        if pd.notna(target_key) and target_key != 'nan':
+            # 使用原始值作为字符串匹配（已经是字符串，保留前导零）
+            str_target_key = target_key.strip()
             if str_target_key and str_target_key in source_data_dict:
                 total_matches += 1
                 has_multiple = False
@@ -270,11 +328,29 @@ def merge_data_files(source_file, target_file, source_key_col=0, target_key_col=
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir)
     
+    # 对于CSV和Excel输出，我们需要确保它们保留前导零
+    print("保存数据，确保保留前导零...")
+    
+    # 不需要再次转换为字符串，保持原状
     print(f"保存结果到: {output_file}")
     try:
         if output_format.lower() in ['xlsx', 'xls']:
-            df_result.to_excel(output_file, index=False, engine='openpyxl')
-            print("Excel格式保存成功！")
+            # 为Excel设置字符串格式
+            with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+                df_result.to_excel(writer, index=False, sheet_name='Sheet1')
+                # 获取工作表
+                worksheet = writer.sheets['Sheet1']
+                # 将所有单元格设置为文本格式
+                for col_idx, col_name in enumerate(df_result.columns, 1):
+                    # 设置列格式为文本
+                    for row_idx in range(2, len(df_result) + 2):  # 从第2行开始（跳过表头）
+                        cell = worksheet.cell(row=row_idx, column=col_idx)
+                        cell.number_format = '@'  # Excel的文本格式
+                        # 如果值以0开头，确保在Excel中保留前导零
+                        if isinstance(cell.value, str) and cell.value.startswith('0'):
+                            # 重新设置值，确保Excel识别为文本
+                            cell.value = f"'{cell.value}"
+            print("Excel格式保存成功，所有单元格设置为文本格式，保留前导零！")
         elif output_format.lower() == 'csv':
             # 保存为UTF-8带BOM的CSV，确保Excel正确识别中文
             df_result.to_csv(output_file, index=False, encoding='utf-8-sig')
@@ -282,8 +358,21 @@ def merge_data_files(source_file, target_file, source_key_col=0, target_key_col=
         else:
             print(f"不支持的输出格式 {output_format}，使用Excel格式保存")
             excel_output = str(output_file).rsplit('.', 1)[0] + '.xlsx'
-            df_result.to_excel(excel_output, index=False, engine='openpyxl')
-            print(f"已保存结果到: {excel_output}")
+            with pd.ExcelWriter(excel_output, engine='openpyxl') as writer:
+                df_result.to_excel(writer, index=False, sheet_name='Sheet1')
+                # 获取工作表
+                worksheet = writer.sheets['Sheet1']
+                # 将所有单元格设置为文本格式
+                for col_idx, col_name in enumerate(df_result.columns, 1):
+                    # 设置列格式为文本
+                    for row_idx in range(2, len(df_result) + 2):  # 从第2行开始（跳过表头）
+                        cell = worksheet.cell(row=row_idx, column=col_idx)
+                        cell.number_format = '@'  # Excel的文本格式
+                        # 如果值以0开头，确保在Excel中保留前导零
+                        if isinstance(cell.value, str) and cell.value.startswith('0'):
+                            # 重新设置值，确保Excel识别为文本
+                            cell.value = f"'{cell.value}"
+            print(f"已保存结果到: {excel_output}，所有单元格设置为文本格式，保留前导零！")
     except Exception as e:
         print(f"保存为 {output_format} 失败: {e}，尝试保存为CSV")
         csv_output = str(output_file).rsplit('.', 1)[0] + '.csv'
