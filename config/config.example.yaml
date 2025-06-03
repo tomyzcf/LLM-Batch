@@ -1,60 +1,35 @@
 # LLM批处理工具配置文件示例
 # 使用时请复制为 config.yaml 并修改相应配置
 
-# 选择使用的API提供商
-default_provider: "aliyun"  # 可选值: aliyun, deepseek, openai, volcengine
+# 选择使用的API提供商。可以根据需要配置 aliyun, deepseek, openai, volcengine 等。
+#注意：火山方舟引擎需要配置接入点ID而不是模型名称
 
+default_provider: "aliyun" 
 # API提供商配置
 api_providers:
-  # 阿里云 API配置
+  ## 阿里云通义千问API配置
   aliyun:
-    api_key: "your-aliyun-api-key"
+    api_key: "your-aliyun-api-key-here"
     base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    model: "qwen-plus-0112"
-    concurrent_limit: 10
+    model: "qwen-plus"
+    concurrent_limit: 50
     model_params:
       temperature: 0.7
       top_p: 0.8
       max_tokens: 2000
-  
-  # DeepSeek API配置
-  deepseek:
-    api_key: "your-deepseek-api-key"
-    base_url: "https://api.deepseek.com"
-    model: "deepseek-chat"
-    concurrent_limit: 10
-    model_params:
-      temperature: 0.7
-      top_p: 0.8
-      max_tokens: 2000
-    
-  # OpenAI API配置
-  openai:
-    api_key: "your-openai-api-key"
-    base_url: "https://api.openai.com"
-    model: "gpt-3.5-turbo"
-    concurrent_limit: 5
-    model_params:
-      temperature: 0.7
-      top_p: 0.8
-      max_tokens: 2000
-    
-  # 火山引擎 API配置 注意！！！火山方舟引擎比较特殊，需要配置接入点名称而不是模型名称，这里容易出错
-  volcengine:
-    api_key: "your-volcengine-api-key"
-    base_url: "https://ark.cn-beijing.volces.com"
-    model: "ep-******-9****"
-    concurrent_limit: 10
-    model_params:
-      temperature: 0.7
-      top_p: 0.8
-      max_tokens: 2000
+      
+  ## 阿里云百炼Agent API配置
+  aliyun-agent:
+    api_key: "your-aliyun-api-key-here"
+    base_url: "https://dashscope.aliyuncs.com"
+    app_id: "your-app-id-here"
+    concurrent_limit: 20
 
 # 输出配置
 output:
-  # 输出格式：支持 csv（默认）, excel, json
+  # 输出格式：支持 csv, excel, json
   format: "csv"
-  # 是否保存原始响应
+  # 是否保存原始API响应
   save_raw_response: true
   # 输出文件编码
   encoding: "utf-8-sig"
@@ -74,7 +49,7 @@ logging:
   # 日志文件编码
   encoding: "utf-8"
   # 统计信息输出间隔（批次数）
-  stats_interval: 10
+  stats_interval: 100
   # 进度条配置
   progress:
     # 是否显示进度条
@@ -88,8 +63,8 @@ logging:
 
 # 处理配置
 process:
-  # 批处理大小
-  batch_size: 5
+  # 批处理大小（同时处理的记录数）
+  batch_size: 20
   # 最大重试次数
   max_retries: 5
   # 重试间隔（秒）

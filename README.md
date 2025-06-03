@@ -1,193 +1,289 @@
-# LLM-Batch
+# LLM批处理工具
 
-[English](README.md) | [中文](README_zh.md)
+一个灵活且功能强大的大语言模型批处理工具，支持多种数据格式和API提供商，能够高效处理大量非结构化数据。
 
-A flexible batch processing tool for large language models (LLMs). Process large amounts of data through various LLM providers with configurable input/output formats and asynchronous processing.
+## 🎯 项目简介
 
-## 🎯 Vision
+LLM-Batch 是一个专业的批处理工具，旨在帮助用户高效地使用大语言模型处理各种类型的非结构化数据，将其转换为结构化信息，降低数据处理门槛，提升数据价值。
 
-LLM-Batch aims to be a powerful, flexible, and user-friendly platform for processing unstructured data using large language models and multimodal models. Our goal is to help users efficiently transform various types of unstructured data into structured information, lowering the barrier to data processing and enhancing data value.
+## 🌟 核心特性
 
-## 🌟 Core Features
+### 数据处理能力
+- **多格式输入支持**：CSV、Excel (xlsx/xls)、JSON 文件
+- **灵活字段选择**：支持指定处理特定字段或字段范围
+- **位置控制**：可指定开始和结束处理位置
+- **断点续传**：支持从中断位置继续处理
+- **编码自动检测**：支持多种文件编码格式
 
-- Multiple input formats support (CSV, Excel, JSON)
-- Multiple LLM provider support (DeepSeek, OpenAI, etc.)
-- Configurable output formats (CSV, Excel, JSON)
-- Asynchronous processing with concurrent control
-- Checkpoint support for resuming interrupted tasks
-- Comprehensive logging system
-- Extensible provider interface
+### API提供商支持
+- **阿里云通义千问**：支持 Qwen 系列模型
+- **DeepSeek**：支持 DeepSeek Chat 模型
+- **OpenAI**：支持 GPT 系列模型
+- **火山引擎**：支持火山方舟平台模型
+- **扩展性**：易于添加新的API提供商
 
-## 🗺️ Roadmap Overview
+### 输出与日志
+- **多种输出格式**：CSV、Excel、JSON
+- **原始响应保存**：可选择保存API原始响应
+- **详细日志记录**：完整的处理过程日志
+- **进度跟踪**：实时进度条和处理统计
+- **错误处理**：详细的错误记录和分类
 
-- ✅ **Phase 1**: Core Capabilities (Current)
-  - Basic text processing
-  - Multiple LLM providers support
-  - Configuration-driven processing
+### 性能与可靠性
+- **异步处理**：支持并发请求处理
+- **重试机制**：自动重试失败的请求
+- **内存监控**：内存使用率监控和限制
+- **批次处理**：可配置的批处理大小
+- **自动备份**：处理前自动备份现有文件
 
-- 🚀 **Phase 2**: Enhanced Features
-  - Multimodal model support
-  - Data pre/post processing toolkit
-  - Batch processing interface
-
-- 📋 **Phase 3**: Vertical Solutions
-  - Industry best practices
-  - Multi-language support
-  - Processing templates
-
-- 🌐 **Phase 4**: Ecosystem
-  - Web interface
-  - Plugin system
-  - API service
-
-[View Full Roadmap](ROADMAP.md)
-
-## Directory Structure
+## 📁 目录结构
 
 ```
-llm_batch_processor/
-├── src/                   # Source code
-│   ├── providers/        # API provider implementations
-│   ├── core/            # Core processing logic
-│   └── utils/           # Utility classes
-├── config/               # Configuration files
-├── inputData/           # Input data directory
-├── outputData/          # Output data directory
-├── prompts/             # Prompt template files
-├── logs/                # Log files
-├── tools/               # Utility tools
-│   └── data_quality_check.py  # Data quality checking tool
-└── docs/                # Documentation
+项目根目录/
+├── src/                      # 源代码
+│   ├── providers/           # API提供商实现
+│   │   ├── base.py         # 基础提供商接口
+│   │   ├── universal_llm.py # 通用LLM提供商
+│   │   ├── aliyun_agent.py # 阿里云特殊提供商
+│   │   └── factory.py      # 提供商工厂
+│   ├── core/               # 核心处理逻辑
+│   │   └── processor.py    # 批处理器
+│   └── utils/              # 工具类
+│       ├── config.py       # 配置管理
+│       ├── logger.py       # 日志管理
+│       └── file_utils.py   # 文件处理工具
+├── config/                  # 配置文件
+│   ├── config.yaml         # 主配置文件
+│   └── config.example.yaml # 配置示例文件
+├── inputData/              # 输入数据目录
+├── outputData/             # 输出数据目录
+├── prompts/                # 提示词模板文件
+├── logs/                   # 日志文件
+├── tools/                  # 实用工具
+│   ├── data_quality_check.py     # 数据质量检查
+│   ├── csv_splitter_manager.py   # CSV分割管理器
+│   ├── data_converter.py         # 数据转换工具
+│   ├── token_cost_calculator.py  # 成本计算器
+│   ├── json_format.py            # JSON格式化工具
+│   ├── dedup_csv.py              # CSV去重工具
+│   ├── merge_table_data.py       # 表格数据合并
+│   ├── compare_keys.py           # 键值比较工具
+│   └── id_matching.py            # ID匹配工具
+└── main.py                 # 主程序入口
 ```
 
-## Quick Start
+## 🚀 快速开始
 
-### 1. Installation
+### 1. 环境准备
 
-1. Clone the repository:
+1. 克隆或下载项目：
 ```bash
-git clone https://github.com/tomyzcf/LLM-Batch.git
-cd LLM-Batch
+git clone <repository-url>
+cd <project-directory>
 ```
 
-2. Install dependencies:
+2. 安装依赖：
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Configuration
+### 2. 配置设置
 
-1. Copy the example configuration file:
+1. 复制配置示例文件：
 ```bash
-cp config/config.example.yaml config/config.yaml
+copy config\config.example.yaml config\config.yaml
 ```
 
-2. Edit `config/config.yaml` and set your API keys and other settings
+2. 编辑 `config/config.yaml` 文件，设置您的API密钥和其他配置
 
-### 3. Usage
+### 3. 基本使用
 
-#### Basic Usage
-
+#### 命令格式
 ```bash
-python main.py <input_path> <prompt_file>
+python main.py <输入路径> <提示词文件> [可选参数]
 ```
 
-#### Parameters
+#### 参数说明
+- `输入路径`：输入文件或目录的路径
+- `提示词文件`：提示词模板文件路径
+- `--fields`：要处理的字段 (格式: 1,2,3 或 1-5)
+- `--start-pos`：开始处理位置 (从1开始)
+- `--end-pos`：结束处理位置 (包含)
+- `--provider`：指定API提供商 (覆盖配置文件设置)
 
-- `input_path`: Path to input file or directory
-- `prompt_file`: Path to prompt template file
-- `--fields`: Input fields to process (optional, format: 1,2,3 or 1-5)
-- `--output-name`: Output file name (optional)
-- `--start-pos`: Start position (optional, 1-based)
-- `--end-pos`: End position (optional, inclusive)
-- `--provider`: Specify API provider (optional, overrides config file)
-
-#### Examples
+#### 使用示例
 
 ```bash
-# Process a single file
-python main.py input.csv prompt.txt
+# 处理单个文件
+python main.py inputData/data.csv prompts/extract.txt
 
-# Process specific fields
-python main.py input.csv prompt.txt --fields 1,2,5
+# 处理特定字段
+python main.py inputData/data.csv prompts/extract.txt --fields 1,3,5
 
-# Process a range of records
-python main.py input.csv prompt.txt --start-pos 1 --end-pos 100
+# 处理指定范围的记录
+python main.py inputData/data.csv prompts/extract.txt --start-pos 1 --end-pos 100
 
-# Use specific provider
-python main.py input.csv prompt.txt --provider openai
+# 使用特定API提供商
+python main.py inputData/data.csv prompts/extract.txt --provider aliyun
+
+# 处理字段范围
+python main.py inputData/data.xlsx prompts/analyze.txt --fields 2-6
 ```
 
-### 4. Prompt Template
+### 4. 提示词模板
 
-Create a prompt file using the following format:
+在 `prompts` 目录中创建提示词文件，格式示例：
 
 ```
-[System Instruction]
-You are a professional data analysis assistant...
+[系统指令]
+你是一个专业的数据分析助手，擅长处理和分析各种类型的数据。
 
-[Task Requirements]
-Please analyze the following data...
+[任务要求]
+请分析以下数据并提取关键信息：
 
-[Output Format]
+{输入数据}
+
+[输出格式]
+请严格按照以下JSON格式输出：
 {
-    "field1": "Description of field1",
-    "field2": "Description of field2"
+    "字段1": "字段1的描述",
+    "字段2": "字段2的描述",
+    "confidence": 0.95
 }
 ```
 
-## Configuration
+## ⚙️ 配置说明
 
-The `config/config.yaml` file contains:
+### API提供商配置
+配置文件支持以下API提供商：
+- **阿里云 (aliyun)**：通义千问API，支持多种模型
+- **DeepSeek (deepseek)**：高性价比的API选择
+- **OpenAI (openai)**：GPT系列模型支持
+- **火山引擎 (volcengine)**：字节跳动的大模型平台
 
-- API provider configurations
-- Output format settings
-- Logging settings
-- Processing parameters
+### 输出配置
+- 支持CSV、Excel、JSON格式输出
+- 可配置是否保存原始API响应
+- 自定义文件编码设置
 
-See [configuration documentation](docs/requirements.md) for details.
+### 处理配置
+- 批处理大小控制
+- 重试次数和间隔设置
+- 内存使用限制
+- 并发请求数限制
 
-## Notes
+### 日志配置
+- 可配置日志级别和格式
+- 支持控制台和文件输出
+- 进度条和统计信息显示
 
-- Ensure API keys are properly configured
-- Test with small batches before large-scale processing
-- Check output format settings
-- Handle sensitive data with care
+## 🔧 实用工具
 
-## Contributing
+项目包含多个实用工具，位于 `tools/` 目录：
 
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+### 数据质量检查工具
+```bash
+python tools/data_quality_check.py <文件路径>
+```
+- 检查文件格式和编码
+- 分析数据质量指标
+- 生成详细的质量报告
 
-## License
+### CSV分割管理器
+```bash
+python tools/csv_splitter_manager.py <输入文件> --method rows --size 1000
+```
+- 按行数分割文件
+- 按文件大小分割
+- 按日期列分割
+- 随机分割
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+### 数据转换工具
+```bash
+python tools/data_converter.py <输入文件> <输出格式>
+```
+- 支持多种格式之间的转换
+- 自动处理编码问题
+- 保持数据完整性
 
-## Tools
+### 成本计算器
+```bash
+python tools/token_cost_calculator.py <文件路径> <提示词文件>
+```
+- 估算处理成本
+- 支持多种模型的token计算
+- 提供详细的成本分析
 
-### Data Quality Check
+### JSON格式化工具
+```bash
+python tools/json_format.py <输入文件>
+```
+- 格式化JSON文件
+- 支持嵌套结构处理
+- 批量处理功能
 
-A standalone tool for checking data quality of various file formats (CSV, Excel, JSON, Parquet, etc.). 
-Run `python tools/data_quality_check.py --help` for detailed usage information.
+### CSV去重工具
+```bash
+python tools/dedup_csv.py <输入文件>
+```
+- 基于指定列去重
+- 保持数据完整性
+- 生成去重报告
 
-### CSV Splitter Manager
+## 📋 最佳实践
 
-A powerful CSV file splitting and management tool that supports various splitting methods:
-- Split by number of rows
-- Split by file size (MB)
-- Split by percentage (e.g., 60%/40%)
-- Split by date column (monthly)
-- Split by column values
-- Random splitting
-- Column management (deletion)
+### 1. 数据准备
+- 确保输入数据格式正确
+- 处理前进行数据质量检查
+- 对大文件考虑先分割处理
 
-Run `python tools/csv_splitter_manager.py --help` for detailed usage information.
+### 2. 提示词设计
+- 明确输出格式要求
+- 提供足够的上下文信息
+- 测试提示词效果
 
-### JSON Format Tool
+### 3. 处理优化
+- 合理设置批处理大小
+- 监控内存使用情况
+- 利用断点续传功能
 
-A tool for processing and formatting JSON files with support for nested structures and batch processing.
-Run `python tools/json_format.py --help` for detailed usage information.
+### 4. 安全注意事项
+- 妥善保管API密钥
+- 谨慎处理敏感数据
+- 定期检查输出结果
 
-### JSON to CSV Converter
+## 🤝 贡献指南
 
-A tool for converting JSON data to CSV format with support for flattening complex structures and custom field mapping.
-Run `python tools/json_to_csv.py --help` for detailed usage information. 
+欢迎贡献代码！请遵循以下流程：
+
+1. Fork 项目
+2. 创建功能分支
+3. 提交更改
+4. 创建 Pull Request
+
+对于重大更改，请先开启 issue 讨论。
+
+## 📄 许可证
+
+本项目采用 MIT 许可证 - 详情请见 [LICENSE](LICENSE) 文件。
+
+## ❓ 常见问题
+
+### Q: 如何添加新的API提供商？
+A: 继承 `BaseProvider` 类并在 `factory.py` 中注册即可。
+
+### Q: 处理大文件时内存不足怎么办？
+A: 调整配置中的 `batch_size` 和 `max_memory_percent` 参数。
+
+### Q: 如何处理API限流？
+A: 调整 `concurrent_limit` 和 `retry_interval` 参数。
+
+### Q: 支持哪些文件格式？
+A: 目前支持CSV、Excel (xlsx/xls)、JSON格式的输入和输出。
+
+### Q: 如何使用断点续传功能？
+A: 工具会自动保存处理进度，再次运行相同命令时会从中断位置继续。
+
+---
+
+如有问题或建议，请提交 issue 或联系项目维护者。 
