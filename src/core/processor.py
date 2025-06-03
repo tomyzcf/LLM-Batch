@@ -12,6 +12,7 @@ import re
 from ..utils.logger import Logger, DEFAULT_LOG_CONFIG
 from ..utils.config import Config
 from ..utils.file_utils import FileProcessor
+from ..utils.prompt_parser import PromptParser
 from ..providers.base import BaseProvider
 
 class BatchProcessor:
@@ -31,9 +32,15 @@ class BatchProcessor:
         end_pos: Optional[int] = None
     ):
         """处理文件"""
-        # 读取prompt文件
-        with open(prompt_file, 'r', encoding='utf-8') as f:
-            prompt_content = f.read()
+        # 使用新的提示词解析器解析提示词文件
+        try:
+            prompt_data = PromptParser.parse_prompt_file(prompt_file)
+            prompt_content = PromptParser.build_prompt_content(prompt_data, "combined")
+            Logger.info(f"提示词格式：{prompt_file.suffix.upper()}")
+            Logger.info(f"提示词文件：{prompt_file}")
+        except Exception as e:
+            Logger.error(f"解析提示词文件失败：{str(e)}")
+            return
             
         # 获取输入文件列表
         input_files = FileProcessor.get_input_files(input_path)
