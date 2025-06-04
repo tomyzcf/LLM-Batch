@@ -213,13 +213,24 @@ function TaskExecution() {
     taskStatus, 
     getConfigSummary,
     validateCurrentStep,
-    fileData
+    fileData,
+    executeTask,
+    initWebSocket,
+    wsConnected,
+    downloadResult
   } = useAppStore()
   
   const [configModalVisible, setConfigModalVisible] = useState(false)
-  const { startTask, pauseTask, stopTask, restartTask } = useTaskRunner()
+  const [executing, setExecuting] = useState(false)
   
   const configSummary = getConfigSummary()
+  
+  // 初始化WebSocket连接
+  useEffect(() => {
+    if (!wsConnected) {
+      initWebSocket()
+    }
+  }, [wsConnected, initWebSocket])
   
   // 格式化时间
   const formatDuration = (seconds) => {
@@ -271,6 +282,34 @@ function TaskExecution() {
     }
   }
 
+  // 开始执行任务
+  const handleStartTask = async () => {
+    if (!validateCurrentStep()) {
+      message.error('请先完成前面步骤的配置')
+      return
+    }
+
+    setExecuting(true)
+    try {
+      await executeTask()
+      message.success('任务已启动')
+    } catch (error) {
+      message.error(`任务启动失败: ${error.message}`)
+    } finally {
+      setExecuting(false)
+    }
+  }
+
+  // 下载结果文件
+  const handleDownload = () => {
+    if (taskStatus.resultFilePath) {
+      downloadResult()
+      message.success('开始下载结果文件')
+    } else {
+      message.error('没有可下载的结果文件')
+    }
+  }
+
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -284,6 +323,17 @@ function TaskExecution() {
             确认配置信息后开始执行批处理任务，实时监控处理进度和状态。
           </Paragraph>
         </div>
+
+        {/* WebSocket连接状态 */}
+        {!wsConnected && (
+          <Alert
+            type="warning"
+            message="实时监控连接异常"
+            description="WebSocket连接失败，可能无法实时显示任务进度。请检查网络连接或刷新页面重试。"
+            showIcon
+            closable
+          />
+        )}
 
         {/* 配置摘要 */}
         <Card 
@@ -303,7 +353,7 @@ function TaskExecution() {
               <div className="config-card-title">API配置</div>
               <div className="config-item">
                 <span className="config-label">类型:</span>
-                <span className="config-value">{configSummary.api.type === 'llm_compatible' ? '通用LLM' : '阿里百炼Agent'}</span>
+                <span className="config-value">{configSummary.api.type}</span>
               </div>
               <div className="config-item">
                 <span className="config-label">模型:</span>
@@ -339,7 +389,7 @@ function TaskExecution() {
               </div>
               <div className="config-item">
                 <span className="config-label">提示词:</span>
-                <span className="config-value">{configSummary.prompt.format.toUpperCase()}格式</span>
+                <span className="config-value">{configSummary.prompt.format}格式</span>
               </div>
             </div>
           </div>
@@ -355,31 +405,11 @@ function TaskExecution() {
                     type="primary" 
                     size="large"
                     icon={<PlayCircleOutlined />}
-                    onClick={startTask}
-                    disabled={!validateCurrentStep()}
+                    onClick={handleStartTask}
+                    disabled={!validateCurrentStep() || executing}
+                    loading={executing}
                   >
-                    开始执行
-                  </Button>
-                )}
-                
-                {taskStatus.isRunning && (
-                  <Button 
-                    size="large"
-                    icon={<PauseCircleOutlined />}
-                    onClick={pauseTask}
-                  >
-                    暂停
-                  </Button>
-                )}
-                
-                {(taskStatus.isRunning || taskStatus.currentStatus === 'paused') && (
-                  <Button 
-                    danger
-                    size="large"
-                    icon={<StopOutlined />}
-                    onClick={stopTask}
-                  >
-                    停止
+                    {executing ? '启动中...' : '开始执行'}
                   </Button>
                 )}
                 
@@ -387,7 +417,9 @@ function TaskExecution() {
                   <Button 
                     size="large"
                     icon={<ReloadOutlined />}
-                    onClick={restartTask}
+                    onClick={handleStartTask}
+                    disabled={executing}
+                    loading={executing}
                   >
                     重新执行
                   </Button>
@@ -400,7 +432,7 @@ function TaskExecution() {
                   {getStatusText(taskStatus.currentStatus)}
                 </Tag>
                 {taskStatus.currentStatus === 'completed' && taskStatus.resultFilePath && (
-                  <Button type="primary" icon={<DownloadOutlined />}>
+                  <Button type="primary" icon={<DownloadOutlined />} onClick={handleDownload}>
                     下载结果
                   </Button>
                 )}
@@ -538,7 +570,23 @@ function TaskExecution() {
             action={
               <Space>
                 <Button size="small" onClick={() => setCurrentStep(6)}>查看结果</Button>
-                <Button size="small" type="primary" icon={<DownloadOutlined />}>下载结果</Button>
+                <Button size="small" type="primary" icon={<DownloadOutlined />} onClick={handleDownload}>下载结果</Button>
+              </Space>
+            }
+          />
+        )}
+
+        {/* 任务失败提示 */}
+        {taskStatus.currentStatus === 'error' && (
+          <Alert
+            type="error"
+            message="任务执行失败"
+            description="任务执行过程中发生错误，请检查错误日志并重新配置后重试。"
+            showIcon
+            action={
+              <Space>
+                <Button size="small" onClick={() => setCurrentStep(1)}>重新配置</Button>
+                <Button size="small" type="primary" onClick={handleStartTask}>重新执行</Button>
               </Space>
             }
           />
@@ -572,7 +620,7 @@ function TaskExecution() {
             <Descriptions.Item label="数据列数">{configSummary.file.columns}</Descriptions.Item>
             <Descriptions.Item label="选择字段">{configSummary.fields.selection}</Descriptions.Item>
             <Descriptions.Item label="处理范围">第{configSummary.fields.range}行</Descriptions.Item>
-            <Descriptions.Item label="提示词格式">{configSummary.prompt.format.toUpperCase()}</Descriptions.Item>
+            <Descriptions.Item label="提示词格式">{configSummary.prompt.format}</Descriptions.Item>
             <Descriptions.Item label="模板类型">{configSummary.prompt.template}</Descriptions.Item>
           </Descriptions>
         </Modal>

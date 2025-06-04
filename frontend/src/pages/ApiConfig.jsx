@@ -68,17 +68,27 @@ function ApiConfig() {
   const [form] = Form.useForm()
   const [isValidating, setIsValidating] = useState(false)
   const [validationResult, setValidationResult] = useState(null)
-  const [apiType, setApiType] = useState('llm') // 'llm' 或 'agent'
-  const [selectedProvider, setSelectedProvider] = useState('deepseek')
+  const [apiType, setApiType] = useState(apiConfig?.api_type || 'llm') // 默认LLM类型
+  const [selectedProvider, setSelectedProvider] = useState(apiConfig?.provider || 'deepseek') // 默认DeepSeek
 
   // 初始化表单
   useEffect(() => {
-    // 直接使用store中的配置
-    setApiType(apiConfig.api_type)
-    setSelectedProvider(apiConfig.provider)
+    // 确保使用store中的配置
+    const currentApiType = apiConfig?.api_type || 'llm'
+    const currentProvider = apiConfig?.provider || 'deepseek'
+    
+    setApiType(currentApiType)
+    setSelectedProvider(currentProvider)
     
     // 设置表单值
-    form.setFieldsValue(apiConfig)
+    form.setFieldsValue({
+      api_type: currentApiType,
+      provider: currentProvider,
+      api_url: apiConfig?.api_url || 'https://api.deepseek.com/v1/chat/completions',
+      api_key: apiConfig?.api_key || '',
+      model: apiConfig?.model || 'deepseek-chat',
+      app_id: apiConfig?.app_id || ''
+    })
   }, [apiConfig, form])
 
   // 处理API类型变化

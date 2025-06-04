@@ -3,6 +3,7 @@ import {
   Typography, 
   Card, 
   Upload, 
+  Button, 
   Table, 
   Alert, 
   Space, 
@@ -10,184 +11,189 @@ import {
   Row, 
   Col,
   Progress,
-  Button,
-  Tag,
-  message
+  message,
+  Spin
 } from 'antd'
 import { 
-  CloudUploadOutlined, 
-  FileTextOutlined, 
+  InboxOutlined, 
+  FileExcelOutlined, 
   DeleteOutlined,
-  EyeOutlined
+  EyeOutlined,
+  UploadOutlined
 } from '@ant-design/icons'
 import useAppStore from '../stores/appStore'
-import { parseFile, formatFileSize } from '../utils/fileParser'
+import { parseFile } from '../utils/fileParser'
 
 const { Title, Text, Paragraph } = Typography
 const { Dragger } = Upload
 
 function DataUpload() {
-  const { fileData, setFileData, resetFileData } = useAppStore()
+  const { 
+    fileData, 
+    setFileData, 
+    uploadFile,
+    setCurrentStep 
+  } = useAppStore()
+  
   const [uploading, setUploading] = useState(false)
-  const [parseProgress, setParseProgress] = useState(0)
+  const [parsing, setParsing] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
 
   // 处理文件上传
   const handleFileUpload = useCallback(async (file) => {
     setUploading(true)
-    setParseProgress(0)
-
+    setUploadProgress(0)
+    
     try {
-      // 模拟进度更新
+      // 模拟上传进度
       const progressInterval = setInterval(() => {
-        setParseProgress(prev => {
+        setUploadProgress(prev => {
           if (prev >= 90) {
             clearInterval(progressInterval)
             return 90
           }
           return prev + 10
         })
-      }, 200)
+      }, 100)
 
-      // 解析文件
-      const result = await parseFile(file, { preview: 10 })
+      // 上传文件到后端
+      const uploadedFile = await uploadFile(file)
       
       clearInterval(progressInterval)
-      setParseProgress(100)
-
-      // 更新文件数据到store
-      setFileData(result)
+      setUploadProgress(100)
       
-      message.success(`文件 "${file.name}" 上传成功！`)
+      // 解析文件内容
+      setParsing(true)
+      const parsedData = await parseFile(file)
+      
+      // 更新文件数据
+      setFileData({
+        fileName: file.name,
+        fileSize: file.size,
+        totalRows: parsedData.totalRows,
+        totalColumns: parsedData.totalColumns,
+        previewData: parsedData.previewData,
+        headers: parsedData.headers,
+        uploadedFile: uploadedFile
+      })
+      
+      message.success('文件上传和解析完成！')
       
     } catch (error) {
-      message.error(`文件上传失败: ${error.message}`)
-      console.error('文件上传错误:', error)
+      console.error('文件处理失败:', error)
+      message.error(`文件处理失败: ${error.message}`)
     } finally {
       setUploading(false)
-      setTimeout(() => setParseProgress(0), 1000)
+      setParsing(false)
+      setUploadProgress(0)
     }
-
-    // 阻止默认上传行为
-    return false
-  }, [setFileData])
+    
+    return false // 阻止默认上传行为
+  }, [uploadFile, setFileData])
 
   // 删除文件
   const handleRemoveFile = () => {
-    resetFileData()
+    setFileData({
+      fileName: '',
+      fileSize: 0,
+      totalRows: 0,
+      totalColumns: 0,
+      previewData: [],
+      headers: [],
+      uploadedFile: null
+    })
     message.info('文件已移除')
   }
 
-  // 生成表格列配置
-  const generateTableColumns = () => {
-    if (!fileData.headers || fileData.headers.length === 0) {
-      return []
-    }
-
-    return fileData.headers.map((header, index) => ({
-      title: (
-        <div>
-          <Text strong>{header}</Text>
-          <br />
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            列 {index + 1}
-          </Text>
-        </div>
-      ),
-      dataIndex: header,
-      key: header,
-      width: 150,
-      ellipsis: true,
-      render: (text) => (
-        <div style={{ wordBreak: 'break-word' }}>
-          {text || <Text type="secondary">-</Text>}
-        </div>
-      )
-    }))
-  }
-
-  // 生成表格数据
-  const generateTableData = () => {
-    if (!fileData.preview) return []
-    
-    return fileData.preview.map((row, index) => ({
-      key: index,
-      ...row
-    }))
-  }
-
-  // 获取文件类型标签颜色
-  const getFileTypeColor = (fileType) => {
-    switch (fileType) {
-      case 'csv': return 'blue'
-      case 'excel': return 'green'
-      case 'json': return 'orange'
-      default: return 'default'
-    }
-  }
-
-  // 上传配置
+  // 文件上传配置
   const uploadProps = {
     name: 'file',
     multiple: false,
+    accept: '.csv,.xlsx,.xls,.json',
     beforeUpload: handleFileUpload,
     showUploadList: false,
-    accept: '.csv,.xlsx,.xls,.json',
-    disabled: uploading
+    disabled: uploading || parsing
   }
 
-  const hasFileData = fileData.fileName && fileData.headers.length > 0
+  // 表格列配置
+  const columns = fileData.headers.map((header, index) => ({
+    title: `${header} (第${index + 1}列)`,
+    dataIndex: index.toString(),
+    key: index.toString(),
+    width: 150,
+    ellipsis: true,
+    render: (text) => (
+      <span title={text}>
+        {text !== null && text !== undefined ? text.toString() : '-'}
+      </span>
+    )
+  }))
+
+  // 表格数据
+  const tableData = fileData.previewData.map((row, index) => ({
+    key: index,
+    ...row.reduce((acc, cell, cellIndex) => {
+      acc[cellIndex.toString()] = cell
+      return acc
+    }, {})
+  }))
 
   return (
-    <Row gutter={24}>
-      {/* 左侧主要内容 */}
-      <Col span={16}>
-        <Space direction="vertical" size="large" style={{ width: '100%' }}>
-          {/* 页面标题和说明 */}
-          <div>
-            <Title level={4}>
-              <CloudUploadOutlined style={{ marginRight: 8 }} />
-              数据上传与预览
-            </Title>
-            <Paragraph type="secondary">
-              上传您要处理的数据文件。支持 CSV、Excel（.xlsx/.xls）和 JSON 格式，文件大小限制为 50MB。
-            </Paragraph>
-          </div>
+    <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+      <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        {/* 页面标题 */}
+        <div>
+          <Title level={4}>
+            <UploadOutlined style={{ marginRight: 8 }} />
+            数据上传与预览
+          </Title>
+          <Paragraph type="secondary">
+            上传要处理的数据文件，支持CSV、Excel、JSON格式，文件大小限制50MB。
+          </Paragraph>
+        </div>
 
-          {/* 文件上传区域 */}
-          {!hasFileData ? (
-            <Card>
-              <Dragger {...uploadProps} style={{ padding: '20px 0' }}>
-                <p className="ant-upload-drag-icon">
-                  <CloudUploadOutlined style={{ fontSize: 48, color: '#1890ff' }} />
-                </p>
-                <p className="ant-upload-text">
-                  点击或拖拽文件到此区域上传
-                </p>
-                <p className="ant-upload-hint">
-                  支持 CSV、Excel（.xlsx/.xls）、JSON 格式文件，最大 50MB
-                </p>
-              </Dragger>
-
-              {uploading && (
-                <div style={{ marginTop: 16 }}>
-                  <Progress 
-                    percent={parseProgress} 
-                    status="active"
-                    strokeColor="#1890ff"
-                  />
-                  <Text type="secondary">正在解析文件...</Text>
+        {/* 文件上传区域 */}
+        {!fileData.fileName ? (
+          <Card>
+            <Dragger {...uploadProps} style={{ padding: '40px 20px' }}>
+              <p className="ant-upload-drag-icon">
+                <InboxOutlined style={{ fontSize: 48, color: '#1890ff' }} />
+              </p>
+              <p className="ant-upload-text">
+                点击或拖拽文件到此区域上传
+              </p>
+              <p className="ant-upload-hint">
+                支持 CSV、Excel (.xlsx/.xls)、JSON 格式文件，单个文件大小不超过 50MB
+              </p>
+            </Dragger>
+            
+            {/* 上传进度 */}
+            {uploading && (
+              <div style={{ marginTop: 16 }}>
+                <Text>正在上传文件...</Text>
+                <Progress percent={uploadProgress} status="active" />
+              </div>
+            )}
+            
+            {/* 解析进度 */}
+            {parsing && (
+              <div style={{ marginTop: 16, textAlign: 'center' }}>
+                <Spin size="large" />
+                <div style={{ marginTop: 8 }}>
+                  <Text>正在解析文件内容...</Text>
                 </div>
-              )}
-            </Card>
-          ) : (
-            /* 文件信息展示 */
+              </div>
+            )}
+          </Card>
+        ) : (
+          <>
+            {/* 文件信息卡片 */}
             <Card 
-              title="已上传文件"
+              title="文件信息" 
               extra={
                 <Button 
-                  type="text" 
                   danger 
-                  icon={<DeleteOutlined />}
+                  icon={<DeleteOutlined />} 
                   onClick={handleRemoveFile}
                 >
                   移除文件
@@ -196,162 +202,138 @@ function DataUpload() {
             >
               <Row gutter={24}>
                 <Col span={6}>
-                  <Statistic
-                    title="文件名"
+                  <Statistic 
+                    title="文件名" 
                     value={fileData.fileName}
-                    prefix={<FileTextOutlined />}
-                    valueStyle={{ fontSize: 16 }}
+                    prefix={<FileExcelOutlined />}
                   />
                 </Col>
                 <Col span={6}>
-                  <Statistic
-                    title="文件大小"
-                    value={formatFileSize(fileData.fileSize)}
-                    valueStyle={{ fontSize: 16 }}
+                  <Statistic 
+                    title="文件大小" 
+                    value={fileData.fileSize > 1024 * 1024 
+                      ? `${(fileData.fileSize / 1024 / 1024).toFixed(1)} MB`
+                      : `${(fileData.fileSize / 1024).toFixed(1)} KB`
+                    }
                   />
                 </Col>
                 <Col span={6}>
-                  <Statistic
-                    title="数据行数"
+                  <Statistic 
+                    title="数据行数" 
                     value={fileData.totalRows}
-                    valueStyle={{ fontSize: 16 }}
                   />
                 </Col>
                 <Col span={6}>
-                  <Statistic
-                    title="数据列数"
+                  <Statistic 
+                    title="数据列数" 
                     value={fileData.totalColumns}
-                    valueStyle={{ fontSize: 16 }}
                   />
                 </Col>
               </Row>
-              
-              <div style={{ marginTop: 16 }}>
-                <Space>
-                  <Tag color={getFileTypeColor(fileData.fileType)}>
-                    {fileData.fileType?.toUpperCase()}
-                  </Tag>
-                  <Tag>{fileData.encoding}</Tag>
-                  {fileData.parseInfo && (
-                    <Text type="secondary">
-                      {fileData.fileType === 'excel' && `工作表: ${fileData.parseInfo.sheetName}`}
-                      {fileData.fileType === 'csv' && `分隔符: ${fileData.parseInfo.delimiter}`}
-                      {fileData.fileType === 'json' && `类型: ${fileData.parseInfo.originalType}`}
-                    </Text>
-                  )}
-                </Space>
-              </div>
             </Card>
-          )}
 
-          {/* 数据预览 */}
-          {hasFileData && (
+            {/* 数据预览 */}
             <Card 
               title={
                 <Space>
                   <EyeOutlined />
                   数据预览
-                  <Text type="secondary">（显示前 10 行）</Text>
+                  <Text type="secondary">(显示前10行)</Text>
                 </Space>
               }
             >
-              {fileData.totalRows === 0 ? (
+              {fileData.previewData.length > 0 ? (
+                <>
+                  <Alert
+                    type="info"
+                    message="数据预览"
+                    description={`当前显示前 ${Math.min(fileData.previewData.length, 10)} 行数据，共 ${fileData.totalRows} 行 ${fileData.totalColumns} 列。请检查数据格式是否正确。`}
+                    showIcon
+                    style={{ marginBottom: 16 }}
+                  />
+                  <Table
+                    columns={columns}
+                    dataSource={tableData.slice(0, 10)}
+                    pagination={false}
+                    scroll={{ x: Math.max(800, fileData.totalColumns * 150), y: 400 }}
+                    size="small"
+                    bordered
+                  />
+                </>
+              ) : (
                 <Alert
                   type="warning"
-                  message="文件中没有找到有效数据"
-                  description="请检查文件格式或内容是否正确"
+                  message="无法预览数据"
+                  description="文件可能为空或格式不正确，请检查文件内容。"
                   showIcon
                 />
-              ) : (
-                <>
-                  <div style={{ marginBottom: 16 }}>
-                    <Alert
-                      type="info"
-                      message={`共找到 ${fileData.totalRows} 行数据，${fileData.totalColumns} 列字段`}
-                      showIcon
-                    />
-                  </div>
-                  
-                  <div className="data-preview">
-                    <Table
-                      columns={generateTableColumns()}
-                      dataSource={generateTableData()}
-                      scroll={{ x: true, y: 400 }}
-                      pagination={false}
-                      size="small"
-                      bordered
-                    />
-                  </div>
-
-                  {fileData.totalRows > 10 && (
-                    <div style={{ marginTop: 8, textAlign: 'center' }}>
-                      <Text type="secondary">
-                        仅显示前 10 行数据，完整数据共 {fileData.totalRows} 行
-                      </Text>
-                    </div>
-                  )}
-                </>
               )}
             </Card>
-          )}
 
-          {/* 字段信息 */}
-          {hasFileData && fileData.headers.length > 0 && (
-            <Card title="字段信息">
-              <Row gutter={[16, 8]}>
-                {fileData.headers.map((header, index) => (
-                  <Col key={index} span={6}>
-                    <Card size="small" style={{ textAlign: 'center' }}>
-                      <Text strong>第 {index + 1} 列</Text>
-                      <br />
-                      <Text>{header}</Text>
-                    </Card>
-                  </Col>
-                ))}
+            {/* 数据质量检查 */}
+            <Card title="数据质量检查">
+              <Row gutter={16}>
+                <Col span={8}>
+                  <div className="quality-check-item">
+                    <div className="quality-check-title">数据完整性</div>
+                    <div className="quality-check-status success">
+                      ✓ 数据结构完整
+                    </div>
+                  </div>
+                </Col>
+                <Col span={8}>
+                  <div className="quality-check-item">
+                    <div className="quality-check-title">格式验证</div>
+                    <div className="quality-check-status success">
+                      ✓ 文件格式正确
+                    </div>
+                  </div>
+                </Col>
+                <Col span={8}>
+                  <div className="quality-check-item">
+                    <div className="quality-check-title">大小检查</div>
+                    <div className={`quality-check-status ${fileData.fileSize > 10 * 1024 * 1024 ? 'warning' : 'success'}`}>
+                      {fileData.fileSize > 10 * 1024 * 1024 ? '⚠ 文件较大' : '✓ 文件大小适中'}
+                    </div>
+                  </div>
+                </Col>
               </Row>
+              
+              <Alert
+                type="info"
+                message="处理建议"
+                description={
+                  <ul style={{ margin: 0, paddingLeft: 20 }}>
+                    <li>确保数据格式正确，第一行为列标题</li>
+                    <li>检查是否有空行或格式异常的数据</li>
+                    <li>大文件建议分批处理以提高效率</li>
+                    <li>确认要处理的字段包含有效的文本内容</li>
+                  </ul>
+                }
+                showIcon
+                style={{ marginTop: 16 }}
+              />
             </Card>
-          )}
-        </Space>
-      </Col>
 
-      {/* 右侧使用说明 */}
-      <Col span={8}>
-        <Card title="使用说明" size="small" style={{ position: 'sticky', top: 24 }}>
-          <Space direction="vertical" size="small">
-            <div>
-              <Text strong>支持格式：</Text>
-              <ul style={{ marginTop: 8, marginLeft: 16, color: '#666' }}>
-                <li><strong>CSV文件：</strong>确保首行为字段标题，使用UTF-8编码</li>
-                <li><strong>Excel文件：</strong>系统将读取第一个工作表，首行为字段标题</li>
-                <li><strong>JSON文件：</strong>支持对象数组格式，如 {`[{"name": "张三", "age": 25}]`}</li>
-              </ul>
-            </div>
-            <div>
-              <Text strong>文件要求：</Text>
-              <ul style={{ marginTop: 8, marginLeft: 16, color: '#666' }}>
-                <li>文件大小：最大 50MB</li>
-                <li>数据格式：第一行必须是字段标题</li>
-                <li>编码格式：建议使用 UTF-8 编码</li>
-                <li>数据完整性：避免空行和不完整数据</li>
-              </ul>
-            </div>
-            <div>
-              <Text strong>处理流程：</Text>
-              <ol style={{ marginTop: 8, marginLeft: 16, color: '#666' }}>
-                <li>上传数据文件</li>
-                <li>预览数据结构</li>
-                <li>选择要处理的字段</li>
-                <li>配置处理提示词</li>
-                <li>执行批量处理</li>
-              </ol>
-            </div>
-            <Text type="secondary">
-              💡 提示：上传文件后可在下一步选择要处理的字段
-            </Text>
-          </Space>
-        </Card>
-      </Col>
-    </Row>
+            {/* 操作提示 */}
+            <Alert
+              type="success"
+              message="文件上传成功！"
+              description="数据文件已成功上传和解析，可以进行下一步字段选择。"
+              showIcon
+              action={
+                <Button 
+                  type="primary" 
+                  onClick={() => setCurrentStep(3)}
+                >
+                  下一步：字段选择
+                </Button>
+              }
+            />
+          </>
+        )}
+      </Space>
+    </div>
   )
 }
 

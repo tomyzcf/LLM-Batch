@@ -1,22 +1,19 @@
 import { create } from 'zustand'
+import apiService from '../utils/api'
 
 const useAppStore = create((set, get) => ({
-  // 步骤控制
+  // 当前步骤
   currentStep: 1,
-  setCurrentStep: (step) => set({ currentStep: step }),
   
   // API配置
   apiConfig: {
-    api_type: 'llm',
-    provider: 'deepseek',
-    api_url: 'https://api.deepseek.com/v1/chat/completions',
+    api_type: 'llm', // 默认选择LLM类型
+    provider: 'deepseek', // 默认选择DeepSeek
+    api_url: 'https://api.deepseek.com/v1/chat/completions', // DeepSeek默认URL
     api_key: '',
-    model: 'deepseek-chat',
-    app_id: '' // 用于阿里百炼Agent
+    model: 'deepseek-chat', // 默认选择V3模型
+    app_id: '' // 阿里百炼Agent专用
   },
-  setApiConfig: (config) => set((state) => ({ 
-    apiConfig: { ...state.apiConfig, ...config } 
-  })),
   
   // 文件数据
   fileData: {
@@ -26,133 +23,346 @@ const useAppStore = create((set, get) => ({
     totalColumns: 0,
     previewData: [],
     headers: [],
-    fileType: '', // csv, excel, json
-    encoding: 'utf-8'
+    uploadedFile: null // 后端返回的文件信息
   },
-  setFileData: (data) => set((state) => ({ 
-    fileData: { ...state.fileData, ...data } 
-  })),
-  resetFileData: () => set({
-    fileData: {
-      fileName: '',
-      fileSize: 0,
-      totalRows: 0,
-      totalColumns: 0,
-      previewData: [],
-      headers: [],
-      fileType: '',
-      encoding: 'utf-8'
-    }
-  }),
   
   // 字段选择
   fieldSelection: {
-    selectedFields: [], // 选中的字段索引数组
-    fieldRange: '', // 字段范围字符串，如 "2-5"
+    selectedFields: [],
+    selectedFieldNames: [],
     startRow: 1,
-    endRow: null, // null表示处理到最后一行
-    useFieldRange: false // 是否使用字段范围而不是单独选择
+    endRow: null
   },
-  setFieldSelection: (selection) => set((state) => ({ 
-    fieldSelection: { ...state.fieldSelection, ...selection } 
-  })),
   
   // 提示词配置
   promptConfig: {
-    format: 'json', // json 或 txt
-    content: {
-      system: '',
-      task: '',
-      output: '',
-      variables: {},
-      examples: ''
-    },
-    textContent: '', // 用于txt格式
-    selectedTemplate: null
+    system: '',
+    task: '',
+    output: '',
+    variables: '',
+    examples: ''
   },
-  setPromptConfig: (config) => set((state) => ({ 
-    promptConfig: { ...state.promptConfig, ...config } 
-  })),
   
   // 任务状态
   taskStatus: {
     isRunning: false,
     isCompleted: false,
-    progress: 0,
-    processedCount: 0,
-    totalCount: 0,
-    currentStatus: 'idle', // idle, running, completed, error, paused
+    currentStatus: 'idle', // idle/running/completed/paused/stopped/error
     startTime: null,
     endTime: null,
-    speed: 0, // 处理速度（条/分钟）
-    estimatedTimeLeft: 0, // 预估剩余时间（秒）
-    logs: [],
-    errorLogs: [],
+    totalCount: 0,
+    processedCount: 0,
     successCount: 0,
     errorCount: 0,
-    resultFilePath: '',
-    errorDetails: null
+    progress: 0,
+    speed: 0,
+    estimatedTimeLeft: 0,
+    logs: [],
+    errorLogs: [],
+    resultFilePath: null
   },
-  setTaskStatus: (status) => set((state) => ({ 
-    taskStatus: { ...state.taskStatus, ...status } 
+
+  // WebSocket连接状态
+  wsConnected: false,
+
+  // Actions
+  setCurrentStep: (step) => set({ currentStep: step }),
+  
+  setApiConfig: (config) => set((state) => ({
+    apiConfig: { ...state.apiConfig, ...config }
   })),
-  addTaskLog: (log) => set((state) => ({ 
-    taskStatus: { 
-      ...state.taskStatus, 
+  
+  setFileData: (data) => set((state) => ({
+    fileData: { ...state.fileData, ...data }
+  })),
+  
+  setFieldSelection: (selection) => set((state) => ({
+    fieldSelection: { ...state.fieldSelection, ...selection }
+  })),
+  
+  setPromptConfig: (config) => set((state) => ({
+    promptConfig: { ...state.promptConfig, ...config }
+  })),
+  
+  setTaskStatus: (status) => set((state) => ({
+    taskStatus: { ...state.taskStatus, ...status }
+  })),
+
+  // 添加任务日志
+  addTaskLog: (log) => set((state) => ({
+    taskStatus: {
+      ...state.taskStatus,
       logs: [...state.taskStatus.logs, {
-        id: Date.now(),
+        id: Date.now() + Math.random(),
         timestamp: new Date().toLocaleTimeString(),
-        message: log.message,
-        type: log.type || 'info', // info, success, warning, error
         ...log
-      }].slice(-1000) // 保持最新1000条日志
-    } 
+      }]
+    }
   })),
-  addErrorLog: (error) => set((state) => ({ 
-    taskStatus: { 
-      ...state.taskStatus, 
+
+  // 添加错误日志
+  addErrorLog: (error) => set((state) => ({
+    taskStatus: {
+      ...state.taskStatus,
       errorLogs: [...state.taskStatus.errorLogs, {
-        id: Date.now(),
+        id: Date.now() + Math.random(),
         timestamp: new Date().toLocaleTimeString(),
         ...error
-      }].slice(-100) // 保持最新100条错误日志
-    } 
-  })),
-  resetTaskStatus: () => set({
-    taskStatus: {
-      isRunning: false,
-      isCompleted: false,
-      progress: 0,
-      processedCount: 0,
-      totalCount: 0,
-      currentStatus: 'idle',
-      startTime: null,
-      endTime: null,
-      speed: 0,
-      estimatedTimeLeft: 0,
-      logs: [],
-      errorLogs: [],
-      successCount: 0,
-      errorCount: 0,
-      resultFilePath: '',
-      errorDetails: null
+      }]
     }
-  }),
-  
-  // 全局设置
-  settings: {
-    theme: 'light',
-    language: 'zh-CN',
-    autoSave: true,
-    maxFileSize: 50 * 1024 * 1024, // 50MB
-    concurrentLimit: 5,
-    retryTimes: 3
-  },
-  setSettings: (settings) => set((state) => ({ 
-    settings: { ...state.settings, ...settings } 
   })),
+
+  // 初始化WebSocket连接
+  initWebSocket: async () => {
+    try {
+      await apiService.connectWebSocket()
+      set({ wsConnected: true })
+
+      // 监听WebSocket事件
+      apiService.on('log', (data) => {
+        get().addTaskLog({
+          message: data.message,
+          type: 'info'
+        })
+      })
+
+      apiService.on('error', (data) => {
+        get().addErrorLog({
+          message: data.message,
+          type: 'error'
+        })
+      })
+
+      apiService.on('progress', (data) => {
+        set((state) => ({
+          taskStatus: {
+            ...state.taskStatus,
+            processedCount: data.processed,
+            totalCount: data.total,
+            progress: data.progress
+          }
+        }))
+      })
+
+      apiService.on('completed', (data) => {
+        set((state) => ({
+          taskStatus: {
+            ...state.taskStatus,
+            isRunning: false,
+            isCompleted: true,
+            currentStatus: 'completed',
+            endTime: new Date(),
+            resultFilePath: data.resultFile
+          }
+        }))
+        
+        get().addTaskLog({
+          message: data.message,
+          type: 'success'
+        })
+      })
+
+      apiService.on('failed', (data) => {
+        set((state) => ({
+          taskStatus: {
+            ...state.taskStatus,
+            isRunning: false,
+            currentStatus: 'error',
+            endTime: new Date()
+          }
+        }))
+        
+        get().addErrorLog({
+          message: data.message,
+          type: 'error'
+        })
+      })
+
+    } catch (error) {
+      console.error('WebSocket连接失败:', error)
+      set({ wsConnected: false })
+    }
+  },
+
+  // 上传文件
+  uploadFile: async (file) => {
+    try {
+      const result = await apiService.uploadFile(file)
+      
+      if (result.success) {
+        set((state) => ({
+          fileData: {
+            ...state.fileData,
+            uploadedFile: result.file
+          }
+        }))
+        return result.file
+      } else {
+        throw new Error(result.error || '上传失败')
+      }
+    } catch (error) {
+      console.error('文件上传失败:', error)
+      throw error
+    }
+  },
+
+  // 执行批处理任务
+  executeTask: async () => {
+    const state = get()
+    
+    try {
+      // 确保WebSocket连接
+      if (!state.wsConnected) {
+        await state.initWebSocket()
+      }
+
+      // 生成配置文件
+      const configResult = await apiService.generateConfig(
+        state.apiConfig,
+        state.promptConfig
+      )
+
+      if (!configResult.success) {
+        throw new Error('配置文件生成失败')
+      }
+
+      // 准备任务参数
+      const taskParams = {
+        inputFile: state.fileData.uploadedFile.path,
+        configPath: configResult.configPath,
+        promptPath: configResult.promptPath,
+        fields: state.fieldSelection.selectedFields,
+        startPos: state.fieldSelection.startRow,
+        endPos: state.fieldSelection.endRow
+      }
+
+      // 启动任务
+      const taskResult = await apiService.executeTask(taskParams)
+
+      if (taskResult.success) {
+        // 更新任务状态
+        set((state) => ({
+          taskStatus: {
+            ...state.taskStatus,
+            isRunning: true,
+            isCompleted: false,
+            currentStatus: 'running',
+            startTime: new Date(),
+            totalCount: state.fieldSelection.endRow - state.fieldSelection.startRow + 1,
+            processedCount: 0,
+            progress: 0,
+            logs: [],
+            errorLogs: []
+          }
+        }))
+
+        get().addTaskLog({
+          message: '任务已启动，正在处理数据...',
+          type: 'info'
+        })
+
+        return taskResult
+      } else {
+        throw new Error(taskResult.error || '任务启动失败')
+      }
+    } catch (error) {
+      console.error('任务执行失败:', error)
+      
+      set((state) => ({
+        taskStatus: {
+          ...state.taskStatus,
+          isRunning: false,
+          currentStatus: 'error'
+        }
+      }))
+
+      get().addErrorLog({
+        message: `任务执行失败: ${error.message}`,
+        type: 'error'
+      })
+
+      throw error
+    }
+  },
+
+  // 下载结果文件
+  downloadResult: () => {
+    const state = get()
+    if (state.taskStatus.resultFilePath) {
+      const filename = state.taskStatus.resultFilePath.split('/').pop()
+      apiService.downloadResult(filename)
+    }
+  },
   
-  // 通用操作
+  // 验证当前步骤
+  validateCurrentStep: () => {
+    const state = get()
+    
+    switch (state.currentStep) {
+      case 1: // API配置
+        return !!(state.apiConfig.api_url && 
+                 state.apiConfig.api_key && 
+                 (state.apiConfig.api_type === 'llm' ? state.apiConfig.model : state.apiConfig.app_id))
+      
+      case 2: // 数据上传
+        return !!(state.fileData.fileName && 
+                 state.fileData.totalRows > 0 && 
+                 state.fileData.uploadedFile)
+      
+      case 3: // 字段选择
+        return !!(state.fieldSelection.selectedFields.length > 0 && 
+                 state.fieldSelection.startRow > 0)
+      
+      case 4: // 提示词配置
+        return !!(state.promptConfig.system && 
+                 state.promptConfig.task && 
+                 state.promptConfig.output)
+      
+      case 5: // 任务执行
+        return true
+      
+      case 6: // 结果查看
+        return state.taskStatus.currentStatus === 'completed'
+      
+      default:
+        return false
+    }
+  },
+  
+  // 获取配置摘要
+  getConfigSummary: () => {
+    const state = get()
+    
+    return {
+      api: {
+        type: state.apiConfig.api_type === 'llm' ? '通用LLM' : '阿里百炼Agent',
+        url: state.apiConfig.api_url,
+        model: state.apiConfig.model || state.apiConfig.app_id
+      },
+      file: {
+        name: state.fileData.fileName,
+        size: state.fileData.fileSize > 1024 * 1024 
+          ? `${(state.fileData.fileSize / 1024 / 1024).toFixed(1)}MB`
+          : `${(state.fileData.fileSize / 1024).toFixed(1)}KB`,
+        rows: state.fileData.totalRows,
+        columns: state.fileData.totalColumns
+      },
+      fields: {
+        selection: state.fieldSelection.selectedFieldNames.length > 0 
+          ? state.fieldSelection.selectedFieldNames.join(', ')
+          : `第${state.fieldSelection.selectedFields.join(', ')}列`,
+        range: state.fieldSelection.endRow 
+          ? `${state.fieldSelection.startRow}-${state.fieldSelection.endRow}`
+          : `${state.fieldSelection.startRow}-${state.fileData.totalRows}`
+      },
+      prompt: {
+        format: 'JSON',
+        template: state.promptConfig.system ? '自定义模板' : '默认模板'
+      }
+    }
+  },
+  
+  // 重置所有状态
   reset: () => set({
     currentStep: 1,
     apiConfig: {
@@ -170,101 +380,39 @@ const useAppStore = create((set, get) => ({
       totalColumns: 0,
       previewData: [],
       headers: [],
-      fileType: '',
-      encoding: 'utf-8'
+      uploadedFile: null
     },
     fieldSelection: {
       selectedFields: [],
-      fieldRange: '',
+      selectedFieldNames: [],
       startRow: 1,
-      endRow: null,
-      useFieldRange: false
+      endRow: null
     },
     promptConfig: {
-      format: 'json',
-      content: {
-        system: '',
-        task: '',
-        output: '',
-        variables: {},
-        examples: ''
-      },
-      textContent: '',
-      selectedTemplate: null
+      system: '',
+      task: '',
+      output: '',
+      variables: '',
+      examples: ''
     },
     taskStatus: {
       isRunning: false,
       isCompleted: false,
-      progress: 0,
-      processedCount: 0,
-      totalCount: 0,
       currentStatus: 'idle',
       startTime: null,
       endTime: null,
+      totalCount: 0,
+      processedCount: 0,
+      successCount: 0,
+      errorCount: 0,
+      progress: 0,
       speed: 0,
       estimatedTimeLeft: 0,
       logs: [],
       errorLogs: [],
-      successCount: 0,
-      errorCount: 0,
-      resultFilePath: '',
-      errorDetails: null
+      resultFilePath: null
     }
-  }),
-  
-  // 验证方法
-  validateCurrentStep: () => {
-    const state = get()
-    switch (state.currentStep) {
-      case 1: // API配置验证
-        return !!(state.apiConfig.api_url && state.apiConfig.api_key && 
-          (state.apiConfig.model || state.apiConfig.app_id))
-      case 2: // 文件数据验证
-        return !!(state.fileData.fileName && state.fileData.headers.length > 0)
-      case 3: // 字段选择验证
-        if (state.fieldSelection.useFieldRange) {
-          // 使用字段范围时验证范围格式
-          return !!state.fieldSelection.fieldRange && state.fieldSelection.fieldRange.trim().length > 0
-        } else {
-          // 使用单独选择时验证是否选择了字段
-          return state.fieldSelection.selectedFields.length > 0
-        }
-      case 4: // 提示词验证
-        return state.promptConfig.format === 'json'
-          ? !!(state.promptConfig.content.system && state.promptConfig.content.task && state.promptConfig.content.output)
-          : !!state.promptConfig.textContent
-      default:
-        return true
-    }
-  },
-  
-  // 获取处理配置摘要
-  getConfigSummary: () => {
-    const state = get()
-    return {
-      api: {
-        type: state.apiConfig.api_type,
-        url: state.apiConfig.api_url,
-        model: state.apiConfig.model || state.apiConfig.app_id
-      },
-      file: {
-        name: state.fileData.fileName,
-        size: `${(state.fileData.fileSize / (1024 * 1024)).toFixed(2)} MB`,
-        rows: state.fileData.totalRows,
-        columns: state.fileData.totalColumns
-      },
-      fields: {
-        selection: state.fieldSelection.useFieldRange 
-          ? state.fieldSelection.fieldRange 
-          : state.fieldSelection.selectedFields.join(', '),
-        range: `${state.fieldSelection.startRow} - ${state.fieldSelection.endRow || '最后一行'}`
-      },
-      prompt: {
-        format: state.promptConfig.format,
-        template: state.promptConfig.selectedTemplate || '自定义'
-      }
-    }
-  }
+  })
 }))
 
 export default useAppStore 
