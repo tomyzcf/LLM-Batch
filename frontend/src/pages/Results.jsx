@@ -193,211 +193,255 @@ function Results() {
   }
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
-        {/* 页面标题 */}
-        <div>
-          <Title level={4}>
-            <CheckCircleOutlined style={{ marginRight: 8 }} />
-            处理结果
-          </Title>
-          <Paragraph type="secondary">
-            数据处理已完成，查看处理统计信息和结果详情。
-          </Paragraph>
-        </div>
+    <Row gutter={24}>
+      {/* 左侧主要内容 */}
+      <Col span={16}>
+        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+          {/* 页面标题和说明 */}
+          <div>
+            <Title level={4}>
+              <CheckCircleOutlined style={{ marginRight: 8 }} />
+              处理结果
+            </Title>
+            <Paragraph type="secondary">
+              数据处理已完成，查看处理统计信息和结果详情。
+            </Paragraph>
+          </div>
 
-        {/* 处理完成提示 */}
-        <Result
-          status="success"
-          title="数据处理完成！"
-          subTitle={`成功处理 ${taskStatus.successCount} 条数据，失败 ${taskStatus.errorCount} 条`}
-          extra={[
-            <Button type="primary" icon={<DownloadOutlined />} onClick={handleDownload} loading={downloading}>
-              下载结果文件
-            </Button>,
-            <Button icon={<EyeOutlined />} onClick={() => setResultModalVisible(true)}>
-              预览结果
-            </Button>,
-            <Button icon={<ReloadOutlined />} onClick={handleRestart}>
-              重新开始
-            </Button>
-          ]}
-        />
+          {/* 处理完成提示 */}
+          <Result
+            status="success"
+            title="数据处理完成！"
+            subTitle={`成功处理 ${taskStatus.successCount} 条数据，失败 ${taskStatus.errorCount} 条`}
+            extra={[
+              <Button type="primary" icon={<DownloadOutlined />} onClick={handleDownload} loading={downloading}>
+                下载结果文件
+              </Button>,
+              <Button icon={<EyeOutlined />} onClick={() => setResultModalVisible(true)}>
+                预览结果
+              </Button>,
+              <Button icon={<ReloadOutlined />} onClick={handleRestart}>
+                重新开始
+              </Button>
+            ]}
+          />
 
-        {/* 下载进度 */}
-        {downloading && (
-          <Card size="small">
+          {/* 下载进度 */}
+          {downloading && (
+            <Card size="small">
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Text>正在生成下载文件...</Text>
+                <Progress percent={downloadProgress} status="active" />
+              </Space>
+            </Card>
+          )}
+
+          {/* 处理统计 */}
+          <Card title="处理统计" icon={<BarChartOutlined />}>
+            <Row gutter={24}>
+              <Col span={6}>
+                <Statistic 
+                  title="总处理数" 
+                  value={taskStatus.processedCount} 
+                  prefix={<FileExcelOutlined />}
+                />
+              </Col>
+              <Col span={6}>
+                <Statistic 
+                  title="成功数" 
+                  value={taskStatus.successCount} 
+                  valueStyle={{ color: '#3f8600' }}
+                  prefix={<CheckCircleOutlined />}
+                />
+              </Col>
+              <Col span={6}>
+                <Statistic 
+                  title="失败数" 
+                  value={taskStatus.errorCount} 
+                  valueStyle={{ color: '#cf1322' }}
+                  prefix={<InfoCircleOutlined />}
+                />
+              </Col>
+              <Col span={6}>
+                <Statistic 
+                  title="成功率" 
+                  value={getSuccessRate()} 
+                  suffix="%" 
+                  valueStyle={{ color: getSuccessRate() >= 90 ? '#3f8600' : getSuccessRate() >= 70 ? '#faad14' : '#cf1322' }}
+                />
+              </Col>
+            </Row>
+            
+            <Row gutter={24} style={{ marginTop: 24 }}>
+              <Col span={8}>
+                <Text type="secondary">处理速度: </Text>
+                <Text strong>{taskStatus.speed || 0} 条/分钟</Text>
+              </Col>
+              <Col span={8}>
+                <Text type="secondary">总耗时: </Text>
+                <Text strong>{formatDuration(getExecutionTime())}</Text>
+              </Col>
+              <Col span={8}>
+                <Text type="secondary">平均耗时: </Text>
+                <Text strong>
+                  {taskStatus.processedCount > 0 
+                    ? (getExecutionTime() / taskStatus.processedCount).toFixed(2) 
+                    : 0} 秒/条
+                </Text>
+              </Col>
+            </Row>
+          </Card>
+
+          {/* 任务信息 */}
+          <Card title="任务信息">
+            <Descriptions column={2} bordered size="small">
+              <Descriptions.Item label="开始时间">
+                {taskStatus.startTime ? new Date(taskStatus.startTime).toLocaleString() : '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="结束时间">
+                {taskStatus.endTime ? new Date(taskStatus.endTime).toLocaleString() : '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="源文件">
+                {configSummary.file.name}
+              </Descriptions.Item>
+              <Descriptions.Item label="文件大小">
+                {configSummary.file.size}
+              </Descriptions.Item>
+              <Descriptions.Item label="处理字段">
+                {configSummary.fields.selection}
+              </Descriptions.Item>
+              <Descriptions.Item label="处理范围">
+                第{configSummary.fields.range}行
+              </Descriptions.Item>
+              <Descriptions.Item label="API类型">
+                {configSummary.api.type === 'llm_compatible' ? '通用LLM' : '阿里百炼Agent'}
+              </Descriptions.Item>
+              <Descriptions.Item label="使用模型">
+                {configSummary.api.model}
+              </Descriptions.Item>
+            </Descriptions>
+          </Card>
+
+          {/* 结果文件信息 */}
+          <Card title="结果文件">
             <Space direction="vertical" style={{ width: '100%' }}>
-              <Text>正在生成下载文件...</Text>
-              <Progress percent={downloadProgress} status="active" />
+              <div>
+                <Text strong>文件路径: </Text>
+                <Text code>{taskStatus.resultFilePath}</Text>
+              </div>
+              <div>
+                <Text strong>文件格式: </Text>
+                <Tag color="blue">Excel (.xlsx)</Tag>
+              </div>
+              <div>
+                <Text strong>包含内容: </Text>
+                <Text>原始数据 + 处理结果 + 状态信息</Text>
+              </div>
+              
+              <Alert
+                type="info"
+                message="文件下载说明"
+                description={
+                  <ul style={{ margin: 0, paddingLeft: 20 }}>
+                    <li>结果文件包含所有原始数据和处理结果</li>
+                    <li>失败的数据行会标注具体错误原因</li>
+                    <li>文件支持Excel格式，可直接使用办公软件打开</li>
+                    <li>建议及时下载保存，避免数据丢失</li>
+                  </ul>
+                }
+                showIcon
+              />
             </Space>
           </Card>
-        )}
+        </Space>
+      </Col>
 
-        {/* 处理统计 */}
-        <Card title="处理统计" icon={<BarChartOutlined />}>
-          <Row gutter={24}>
-            <Col span={6}>
-              <Statistic 
-                title="总处理数" 
-                value={taskStatus.processedCount} 
-                prefix={<FileExcelOutlined />}
-              />
-            </Col>
-            <Col span={6}>
-              <Statistic 
-                title="成功数" 
-                value={taskStatus.successCount} 
-                valueStyle={{ color: '#3f8600' }}
-                prefix={<CheckCircleOutlined />}
-              />
-            </Col>
-            <Col span={6}>
-              <Statistic 
-                title="失败数" 
-                value={taskStatus.errorCount} 
-                valueStyle={{ color: '#cf1322' }}
-                prefix={<InfoCircleOutlined />}
-              />
-            </Col>
-            <Col span={6}>
-              <Statistic 
-                title="成功率" 
-                value={getSuccessRate()} 
-                suffix="%" 
-                valueStyle={{ color: getSuccessRate() >= 90 ? '#3f8600' : getSuccessRate() >= 70 ? '#faad14' : '#cf1322' }}
-              />
-            </Col>
-          </Row>
-          
-          <Row gutter={24} style={{ marginTop: 24 }}>
-            <Col span={8}>
-              <Text type="secondary">处理速度: </Text>
-              <Text strong>{taskStatus.speed || 0} 条/分钟</Text>
-            </Col>
-            <Col span={8}>
-              <Text type="secondary">总耗时: </Text>
-              <Text strong>{formatDuration(getExecutionTime())}</Text>
-            </Col>
-            <Col span={8}>
-              <Text type="secondary">平均耗时: </Text>
-              <Text strong>
-                {taskStatus.processedCount > 0 
-                  ? (getExecutionTime() / taskStatus.processedCount).toFixed(2) 
-                  : 0} 秒/条
-              </Text>
-            </Col>
-          </Row>
-        </Card>
-
-        {/* 任务信息 */}
-        <Card title="任务信息">
-          <Descriptions column={2} bordered size="small">
-            <Descriptions.Item label="开始时间">
-              {taskStatus.startTime ? new Date(taskStatus.startTime).toLocaleString() : '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="结束时间">
-              {taskStatus.endTime ? new Date(taskStatus.endTime).toLocaleString() : '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="源文件">
-              {configSummary.file.name}
-            </Descriptions.Item>
-            <Descriptions.Item label="文件大小">
-              {configSummary.file.size}
-            </Descriptions.Item>
-            <Descriptions.Item label="处理字段">
-              {configSummary.fields.selection}
-            </Descriptions.Item>
-            <Descriptions.Item label="处理范围">
-              第{configSummary.fields.range}行
-            </Descriptions.Item>
-            <Descriptions.Item label="API类型">
-              {configSummary.api.type === 'llm_compatible' ? '通用LLM' : '阿里百炼Agent'}
-            </Descriptions.Item>
-            <Descriptions.Item label="使用模型">
-              {configSummary.api.model}
-            </Descriptions.Item>
-          </Descriptions>
-        </Card>
-
-        {/* 结果文件信息 */}
-        <Card title="结果文件">
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <div>
-              <Text strong>文件路径: </Text>
-              <Text code>{taskStatus.resultFilePath}</Text>
-            </div>
-            <div>
-              <Text strong>文件格式: </Text>
-              <Tag color="blue">Excel (.xlsx)</Tag>
-            </div>
-            <div>
-              <Text strong>包含内容: </Text>
-              <Text>原始数据 + 处理结果 + 状态信息</Text>
-            </div>
-            
-            <Alert
-              type="info"
-              message="文件下载说明"
-              description={
-                <ul style={{ margin: 0, paddingLeft: 20 }}>
-                  <li>结果文件包含所有原始数据和处理结果</li>
-                  <li>失败的数据行会标注具体错误原因</li>
-                  <li>文件支持Excel格式，可直接使用办公软件打开</li>
-                  <li>建议及时下载保存，避免数据丢失</li>
-                </ul>
-              }
-              showIcon
-            />
-          </Space>
-        </Card>
-
-        {/* 操作建议 */}
-        <Card title="后续操作建议" size="small">
+      {/* 右侧操作建议 */}
+      <Col span={8}>
+        <Card title="后续操作建议" size="small" style={{ position: 'sticky', top: 24 }}>
           <Space direction="vertical" size="small">
-            <Text>• <strong>质量检查：</strong> 下载结果文件后，建议抽样检查处理质量</Text>
-            <Text>• <strong>错误处理：</strong> 对于失败的数据，可以调整提示词后重新处理</Text>
-            <Text>• <strong>批量处理：</strong> 如需处理更多数据，可以重新开始配置新任务</Text>
-            <Text>• <strong>配置保存：</strong> 如果处理效果良好，建议记录当前配置参数</Text>
-            <Text type="secondary">💡 提示：成功率低于70%时，建议优化提示词配置</Text>
+            <div>
+              <Text strong>质量检查：</Text>
+              <ul style={{ marginTop: 8, marginLeft: 16, color: '#666' }}>
+                <li>下载结果文件后建议抽样检查处理质量</li>
+                <li>重点关注成功率较低的数据类型</li>
+                <li>验证输出格式是否符合预期</li>
+              </ul>
+            </div>
+            <div>
+              <Text strong>错误处理：</Text>
+              <ul style={{ marginTop: 8, marginLeft: 16, color: '#666' }}>
+                <li>查看失败数据的具体错误原因</li>
+                <li>根据错误类型调整提示词配置</li>
+                <li>优化输入数据格式和内容</li>
+                <li>对失败数据进行二次处理</li>
+              </ul>
+            </div>
+            <div>
+              <Text strong>优化建议：</Text>
+              <ul style={{ marginTop: 8, marginLeft: 16, color: '#666' }}>
+                <li><strong>成功率 ≥ 90%：</strong>配置优秀，可用于批量处理</li>
+                <li><strong>成功率 70-90%：</strong>配置良好，可适当优化</li>
+                <li><strong>成功率 &lt; 70%：</strong>建议重新配置提示词</li>
+              </ul>
+            </div>
+            <div>
+              <Text strong>批量处理：</Text>
+              <ul style={{ marginTop: 8, marginLeft: 16, color: '#666' }}>
+                <li>记录当前有效的配置参数</li>
+                <li>可重复使用成功的提示词模板</li>
+                <li>建议分批处理大量数据文件</li>
+              </ul>
+            </div>
+            <div>
+              <Text strong>快捷操作：</Text>
+              <ul style={{ marginTop: 8, marginLeft: 16, color: '#666' }}>
+                <li>点击"预览结果"查看数据样本</li>
+                <li>点击"下载结果文件"获取完整数据</li>
+                <li>点击"重新开始"配置新的处理任务</li>
+              </ul>
+            </div>
+            <Text type="secondary">
+              💡 提示：成功率低于70%时，建议优化提示词配置
+            </Text>
           </Space>
         </Card>
+      </Col>
 
-        {/* 结果预览模态框 */}
-        <Modal
-          title="结果预览"
-          open={resultModalVisible}
-          onCancel={() => setResultModalVisible(false)}
-          width={1000}
-          footer={[
-            <Button key="download" type="primary" icon={<DownloadOutlined />} onClick={() => {
-              setResultModalVisible(false)
-              handleDownload()
-            }}>
-              下载完整结果
-            </Button>,
-            <Button key="close" onClick={() => setResultModalVisible(false)}>
-              关闭
-            </Button>
-          ]}
-        >
-          <div style={{ marginBottom: 16 }}>
-            <Alert
-              type="info"
-              message={`显示前 ${Math.min(resultData.length, 50)} 条结果，完整数据请下载文件查看`}
-              showIcon
-            />
-          </div>
-          <Table
-            columns={resultColumns}
-            dataSource={resultData}
-            pagination={{ pageSize: 10 }}
-            scroll={{ x: 800, y: 400 }}
-            size="small"
+      {/* 结果预览模态框 */}
+      <Modal
+        title="结果预览"
+        open={resultModalVisible}
+        onCancel={() => setResultModalVisible(false)}
+        width={1000}
+        footer={[
+          <Button key="download" type="primary" icon={<DownloadOutlined />} onClick={() => {
+            setResultModalVisible(false)
+            handleDownload()
+          }}>
+            下载完整结果
+          </Button>,
+          <Button key="close" onClick={() => setResultModalVisible(false)}>
+            关闭
+          </Button>
+        ]}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <Alert
+            type="info"
+            message={`显示前 ${Math.min(resultData.length, 50)} 条结果，完整数据请下载文件查看`}
+            showIcon
           />
-        </Modal>
-      </Space>
-    </div>
+        </div>
+        <Table
+          columns={resultColumns}
+          dataSource={resultData}
+          pagination={{ pageSize: 10 }}
+          scroll={{ x: 800, y: 400 }}
+          size="small"
+        />
+      </Modal>
+    </Row>
   )
 }
 

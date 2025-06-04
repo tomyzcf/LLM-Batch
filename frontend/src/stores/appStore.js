@@ -7,10 +7,11 @@ const useAppStore = create((set, get) => ({
   
   // API配置
   apiConfig: {
-    api_type: 'llm_compatible',
-    api_url: '',
+    api_type: 'llm',
+    provider: 'deepseek',
+    api_url: 'https://api.deepseek.com/v1/chat/completions',
     api_key: '',
-    model: '',
+    model: 'deepseek-chat',
     app_id: '' // 用于阿里百炼Agent
   },
   setApiConfig: (config) => set((state) => ({ 
@@ -155,10 +156,11 @@ const useAppStore = create((set, get) => ({
   reset: () => set({
     currentStep: 1,
     apiConfig: {
-      api_type: 'llm_compatible',
-      api_url: '',
+      api_type: 'llm',
+      provider: 'deepseek',
+      api_url: 'https://api.deepseek.com/v1/chat/completions',
       api_key: '',
-      model: '',
+      model: 'deepseek-chat',
       app_id: ''
     },
     fileData: {

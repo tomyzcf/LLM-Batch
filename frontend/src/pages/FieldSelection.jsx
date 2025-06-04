@@ -250,189 +250,225 @@ function FieldSelection() {
   }
 
   return (
-    <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
-        {/* 页面标题和说明 */}
-        <div>
-          <Title level={4}>
-            <TableOutlined style={{ marginRight: 8 }} />
-            字段选择与范围设置
-          </Title>
-          <Paragraph type="secondary">
-            选择要处理的数据字段和处理范围。您可以选择特定字段或使用字段范围表达式。
-          </Paragraph>
-        </div>
+    <Row gutter={24}>
+      {/* 左侧主要内容 */}
+      <Col span={16}>
+        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+          {/* 页面标题和说明 */}
+          <div>
+            <Title level={4}>
+              <TableOutlined style={{ marginRight: 8 }} />
+              字段选择与范围设置
+            </Title>
+            <Paragraph type="secondary">
+              选择要处理的数据字段和处理范围。您可以选择特定字段或使用字段范围表达式。
+            </Paragraph>
+          </div>
 
-        {/* 文件信息摘要 */}
-        <Card size="small">
-          <Row gutter={16}>
-            <Col span={6}>
-              <Text type="secondary">文件名：</Text>
-              <Text strong>{fileData.fileName}</Text>
-            </Col>
-            <Col span={6}>
-              <Text type="secondary">总行数：</Text>
-              <Text strong>{fileData.totalRows}</Text>
-            </Col>
-            <Col span={6}>
-              <Text type="secondary">总列数：</Text>
-              <Text strong>{fileData.totalColumns}</Text>
-            </Col>
-            <Col span={6}>
-              <Text type="secondary">文件类型：</Text>
-              <Tag color="blue">{fileData.fileType?.toUpperCase()}</Tag>
-            </Col>
-          </Row>
-        </Card>
+          {/* 文件信息摘要 */}
+          <Card size="small">
+            <Row gutter={16}>
+              <Col span={6}>
+                <Text type="secondary">文件名：</Text>
+                <Text strong>{fileData.fileName}</Text>
+              </Col>
+              <Col span={6}>
+                <Text type="secondary">总行数：</Text>
+                <Text strong>{fileData.totalRows}</Text>
+              </Col>
+              <Col span={6}>
+                <Text type="secondary">总列数：</Text>
+                <Text strong>{fileData.totalColumns}</Text>
+              </Col>
+              <Col span={6}>
+                <Text type="secondary">文件类型：</Text>
+                <Tag color="blue">{fileData.fileType?.toUpperCase()}</Tag>
+              </Col>
+            </Row>
+          </Card>
 
-        {/* 字段选择方式 */}
-        <Card title="选择方式">
-          <Radio.Group 
-            value={useFieldRange ? 'range' : 'individual'} 
-            onChange={handleSelectionModeChange}
-          >
-            <Space direction="vertical">
-              <Radio value="individual">
-                <Text strong>逐个选择字段</Text>
-                <br />
-                <Text type="secondary">从下方表格中勾选要处理的字段</Text>
-              </Radio>
-              <Radio value="range">
-                <Text strong>字段范围表达式</Text>
-                <br />
-                <Text type="secondary">使用范围表达式快速选择，如 "1-5" 或 "1,3,5-8"</Text>
-              </Radio>
-            </Space>
-          </Radio.Group>
-
-          {useFieldRange && (
-            <div style={{ marginTop: 16 }}>
-              <Text strong>字段范围：</Text>
-              <Input
-                value={localFieldRange}
-                onChange={(e) => handleFieldRangeChange(e.target.value)}
-                placeholder="例如：1-5 或 1,3,5-8"
-                style={{ marginTop: 8 }}
-                status={localFieldRange && !validateFieldRange(localFieldRange).valid ? 'error' : ''}
-              />
-              {localFieldRange && !validateFieldRange(localFieldRange).valid && (
-                <Text type="danger" style={{ fontSize: 12 }}>
-                  {validateFieldRange(localFieldRange).message}
-                </Text>
-              )}
-              <div style={{ marginTop: 8 }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  支持格式：单个数字(1)、范围(1-5)、组合(1,3,5-8)。列号从1开始计算。
-                </Text>
-              </div>
-            </div>
-          )}
-        </Card>
-
-        {/* 字段列表 */}
-        <Card 
-          title={`可用字段 (${fileData.headers.length})`}
-          extra={
-            !useFieldRange && (
-              <Space>
-                <Text type="secondary">
-                  已选择 {selectedFields.length} 个字段
-                </Text>
+          {/* 字段选择方式 */}
+          <Card title="选择方式">
+            <Radio.Group 
+              value={useFieldRange ? 'range' : 'individual'} 
+              onChange={handleSelectionModeChange}
+            >
+              <Space direction="vertical">
+                <Radio value="individual">
+                  <Text strong>逐个选择字段</Text>
+                  <br />
+                  <Text type="secondary">从下方表格中勾选要处理的字段</Text>
+                </Radio>
+                <Radio value="range">
+                  <Text strong>字段范围表达式</Text>
+                  <br />
+                  <Text type="secondary">使用范围表达式快速选择，如 "1-5" 或 "1,3,5-8"</Text>
+                </Radio>
               </Space>
-            )
-          }
-        >
-          <Table
-            columns={fieldColumns}
-            dataSource={fieldTableData}
-            pagination={false}
-            size="small"
-            scroll={{ y: 300 }}
-          />
-        </Card>
+            </Radio.Group>
 
-        {/* 当前选择预览 */}
-        {isValid && (
-          <Card 
-            title="当前选择" 
-            extra={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
-          >
-            <Space direction="vertical" style={{ width: '100%' }}>
-              <div>
-                <Text strong>已选择字段：</Text>
+            {useFieldRange && (
+              <div style={{ marginTop: 16 }}>
+                <Text strong>字段范围：</Text>
+                <Input
+                  value={localFieldRange}
+                  onChange={(e) => handleFieldRangeChange(e.target.value)}
+                  placeholder="例如：1-5 或 1,3,5-8"
+                  style={{ marginTop: 8 }}
+                  status={localFieldRange && !validateFieldRange(localFieldRange).valid ? 'error' : ''}
+                />
+                {localFieldRange && !validateFieldRange(localFieldRange).valid && (
+                  <Text type="danger" style={{ fontSize: 12 }}>
+                    {validateFieldRange(localFieldRange).message}
+                  </Text>
+                )}
                 <div style={{ marginTop: 8 }}>
-                  <Space wrap>
-                    {currentSelectedFields.map(index => (
-                      <Tag key={index} color="blue">
-                        第{index + 1}列：{fileData.headers[index]}
-                      </Tag>
-                    ))}
-                  </Space>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    支持格式：单个数字(1)、范围(1-5)、组合(1,3,5-8)。列号从1开始计算。
+                  </Text>
                 </div>
               </div>
-            </Space>
+            )}
           </Card>
-        )}
 
-        {/* 处理范围设置 */}
-        <Card title="处理范围设置">
-          <Row gutter={24}>
-            <Col span={12}>
-              <Space direction="vertical" style={{ width: '100%' }}>
-                <Text strong>起始行数：</Text>
-                <InputNumber
-                  value={startRow}
-                  onChange={(value) => handleRowRangeChange('start', value)}
-                  min={1}
-                  max={totalDataRows}
-                  style={{ width: '100%' }}
-                  placeholder="从第几行开始处理"
-                />
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  从第几行开始处理数据（包含该行）
-                </Text>
-              </Space>
-            </Col>
-            <Col span={12}>
-              <Space direction="vertical" style={{ width: '100%' }}>
-                <Text strong>结束行数：</Text>
-                <InputNumber
-                  value={endRow}
-                  onChange={(value) => handleRowRangeChange('end', value)}
-                  min={startRow}
-                  max={totalDataRows}
-                  style={{ width: '100%' }}
-                  placeholder="留空表示处理到最后一行"
-                />
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  处理到第几行结束（包含该行），留空表示处理到最后一行
-                </Text>
-              </Space>
-            </Col>
-          </Row>
-          
-          <div style={{ marginTop: 16 }}>
-            <Alert
-              type="info"
-              icon={<InfoCircleOutlined />}
-              message={`将处理第 ${startRow} 到第 ${effectiveEndRow} 行，共 ${effectiveEndRow - startRow + 1} 行数据`}
-              showIcon
+          {/* 字段列表 */}
+          <Card 
+            title={`可用字段 (${fileData.headers.length})`}
+            extra={
+              !useFieldRange && (
+                <Space>
+                  <Text type="secondary">
+                    已选择 {selectedFields.length} 个字段
+                  </Text>
+                </Space>
+              )
+            }
+          >
+            <Table
+              columns={fieldColumns}
+              dataSource={fieldTableData}
+              pagination={false}
+              size="small"
+              scroll={{ y: 300 }}
             />
-          </div>
-        </Card>
+          </Card>
 
-        {/* 配置说明 */}
-        <Card title="配置说明" size="small">
+          {/* 当前选择预览 */}
+          {isValid && (
+            <Card 
+              title="当前选择" 
+              extra={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
+            >
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <div>
+                  <Text strong>已选择字段：</Text>
+                  <div style={{ marginTop: 8 }}>
+                    <Space wrap>
+                      {currentSelectedFields.map(index => (
+                        <Tag key={index} color="blue">
+                          第{index + 1}列：{fileData.headers[index]}
+                        </Tag>
+                      ))}
+                    </Space>
+                  </div>
+                </div>
+              </Space>
+            </Card>
+          )}
+
+          {/* 处理范围设置 */}
+          <Card title="处理范围设置">
+            <Row gutter={24}>
+              <Col span={12}>
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <Text strong>起始行数：</Text>
+                  <InputNumber
+                    value={startRow}
+                    onChange={(value) => handleRowRangeChange('start', value)}
+                    min={1}
+                    max={totalDataRows}
+                    style={{ width: '100%' }}
+                    placeholder="从第几行开始处理"
+                  />
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    从第几行开始处理数据（包含该行）
+                  </Text>
+                </Space>
+              </Col>
+              <Col span={12}>
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <Text strong>结束行数：</Text>
+                  <InputNumber
+                    value={endRow}
+                    onChange={(value) => handleRowRangeChange('end', value)}
+                    min={startRow}
+                    max={totalDataRows}
+                    style={{ width: '100%' }}
+                    placeholder="留空表示处理到最后一行"
+                  />
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    处理到第几行结束（包含该行），留空表示处理到最后一行
+                  </Text>
+                </Space>
+              </Col>
+            </Row>
+            
+            <div style={{ marginTop: 16 }}>
+              <Alert
+                type="info"
+                icon={<InfoCircleOutlined />}
+                message={`将处理第 ${startRow} 到第 ${effectiveEndRow} 行，共 ${effectiveEndRow - startRow + 1} 行数据`}
+                showIcon
+              />
+            </div>
+          </Card>
+        </Space>
+      </Col>
+
+      {/* 右侧配置说明 */}
+      <Col span={8}>
+        <Card title="配置说明" size="small" style={{ position: 'sticky', top: 24 }}>
           <Space direction="vertical" size="small">
-            <Text>• <strong>字段选择：</strong> 至少选择一个字段进行处理</Text>
-            <Text>• <strong>范围表达式：</strong> 支持 "1-5"（连续范围）、"1,3,5"（多个字段）、"1,3-5,8"（混合格式）</Text>
-            <Text>• <strong>行数范围：</strong> 用于指定处理数据的起始和结束位置，支持分批处理和断点续传</Text>
-            <Text>• <strong>数据索引：</strong> 列号和行号都从1开始计算</Text>
-            <Text type="secondary">💡 提示：合理设置处理范围可以避免一次性处理过多数据</Text>
+            <div>
+              <Text strong>字段选择：</Text>
+              <ul style={{ marginTop: 8, marginLeft: 16, color: '#666' }}>
+                <li><strong>逐个选择：</strong>从表格中勾选要处理的字段</li>
+                <li><strong>范围表达式：</strong>使用简洁的表达式快速选择</li>
+                <li><strong>最少要求：</strong>至少选择一个字段进行处理</li>
+              </ul>
+            </div>
+            <div>
+              <Text strong>范围表达式格式：</Text>
+              <ul style={{ marginTop: 8, marginLeft: 16, color: '#666' }}>
+                <li><strong>连续范围：</strong>"1-5" 表示第1到第5列</li>
+                <li><strong>多个字段：</strong>"1,3,5" 表示第1、3、5列</li>
+                <li><strong>混合格式：</strong>"1,3-5,8" 表示第1、3到5、第8列</li>
+              </ul>
+            </div>
+            <div>
+              <Text strong>处理范围：</Text>
+              <ul style={{ marginTop: 8, marginLeft: 16, color: '#666' }}>
+                <li><strong>起始行：</strong>从第几行开始处理数据</li>
+                <li><strong>结束行：</strong>处理到第几行，留空表示到最后</li>
+                <li><strong>分批处理：</strong>合理设置范围避免超时</li>
+                <li><strong>断点续传：</strong>支持从指定行继续处理</li>
+              </ul>
+            </div>
+            <div>
+              <Text strong>注意事项：</Text>
+              <ul style={{ marginTop: 8, marginLeft: 16, color: '#666' }}>
+                <li>列号和行号都从1开始计算</li>
+                <li>表格第一行是字段标题，不参与处理</li>
+                <li>处理范围是指数据行，不包括标题行</li>
+              </ul>
+            </div>
+            <Text type="secondary">
+              💡 提示：合理设置处理范围可以避免一次性处理过多数据
+            </Text>
           </Space>
         </Card>
-      </Space>
-    </div>
+      </Col>
+    </Row>
   )
 }
 

@@ -138,190 +138,220 @@ function DataUpload() {
   const hasFileData = fileData.fileName && fileData.headers.length > 0
 
   return (
-    <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
-        {/* 页面标题和说明 */}
-        <div>
-          <Title level={4}>
-            <CloudUploadOutlined style={{ marginRight: 8 }} />
-            数据上传与预览
-          </Title>
-          <Paragraph type="secondary">
-            上传您要处理的数据文件。支持 CSV、Excel（.xlsx/.xls）和 JSON 格式，文件大小限制为 50MB。
-          </Paragraph>
-        </div>
+    <Row gutter={24}>
+      {/* 左侧主要内容 */}
+      <Col span={16}>
+        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+          {/* 页面标题和说明 */}
+          <div>
+            <Title level={4}>
+              <CloudUploadOutlined style={{ marginRight: 8 }} />
+              数据上传与预览
+            </Title>
+            <Paragraph type="secondary">
+              上传您要处理的数据文件。支持 CSV、Excel（.xlsx/.xls）和 JSON 格式，文件大小限制为 50MB。
+            </Paragraph>
+          </div>
 
-        {/* 文件上传区域 */}
-        {!hasFileData ? (
-          <Card>
-            <Dragger {...uploadProps} style={{ padding: '20px 0' }}>
-              <p className="ant-upload-drag-icon">
-                <CloudUploadOutlined style={{ fontSize: 48, color: '#1890ff' }} />
-              </p>
-              <p className="ant-upload-text">
-                点击或拖拽文件到此区域上传
-              </p>
-              <p className="ant-upload-hint">
-                支持 CSV、Excel（.xlsx/.xls）、JSON 格式文件，最大 50MB
-              </p>
-            </Dragger>
+          {/* 文件上传区域 */}
+          {!hasFileData ? (
+            <Card>
+              <Dragger {...uploadProps} style={{ padding: '20px 0' }}>
+                <p className="ant-upload-drag-icon">
+                  <CloudUploadOutlined style={{ fontSize: 48, color: '#1890ff' }} />
+                </p>
+                <p className="ant-upload-text">
+                  点击或拖拽文件到此区域上传
+                </p>
+                <p className="ant-upload-hint">
+                  支持 CSV、Excel（.xlsx/.xls）、JSON 格式文件，最大 50MB
+                </p>
+              </Dragger>
 
-            {uploading && (
-              <div style={{ marginTop: 16 }}>
-                <Progress 
-                  percent={parseProgress} 
-                  status="active"
-                  strokeColor="#1890ff"
-                />
-                <Text type="secondary">正在解析文件...</Text>
-              </div>
-            )}
-          </Card>
-        ) : (
-          /* 文件信息展示 */
-          <Card 
-            title="已上传文件"
-            extra={
-              <Button 
-                type="text" 
-                danger 
-                icon={<DeleteOutlined />}
-                onClick={handleRemoveFile}
-              >
-                移除文件
-              </Button>
-            }
-          >
-            <Row gutter={24}>
-              <Col span={6}>
-                <Statistic
-                  title="文件名"
-                  value={fileData.fileName}
-                  prefix={<FileTextOutlined />}
-                  valueStyle={{ fontSize: 16 }}
-                />
-              </Col>
-              <Col span={6}>
-                <Statistic
-                  title="文件大小"
-                  value={formatFileSize(fileData.fileSize)}
-                  valueStyle={{ fontSize: 16 }}
-                />
-              </Col>
-              <Col span={6}>
-                <Statistic
-                  title="数据行数"
-                  value={fileData.totalRows}
-                  valueStyle={{ fontSize: 16 }}
-                />
-              </Col>
-              <Col span={6}>
-                <Statistic
-                  title="数据列数"
-                  value={fileData.totalColumns}
-                  valueStyle={{ fontSize: 16 }}
-                />
-              </Col>
-            </Row>
-            
-            <div style={{ marginTop: 16 }}>
-              <Space>
-                <Tag color={getFileTypeColor(fileData.fileType)}>
-                  {fileData.fileType?.toUpperCase()}
-                </Tag>
-                <Tag>{fileData.encoding}</Tag>
-                {fileData.parseInfo && (
-                  <Text type="secondary">
-                    {fileData.fileType === 'excel' && `工作表: ${fileData.parseInfo.sheetName}`}
-                    {fileData.fileType === 'csv' && `分隔符: ${fileData.parseInfo.delimiter}`}
-                    {fileData.fileType === 'json' && `类型: ${fileData.parseInfo.originalType}`}
-                  </Text>
-                )}
-              </Space>
-            </div>
-          </Card>
-        )}
-
-        {/* 数据预览 */}
-        {hasFileData && (
-          <Card 
-            title={
-              <Space>
-                <EyeOutlined />
-                数据预览
-                <Text type="secondary">（显示前 10 行）</Text>
-              </Space>
-            }
-          >
-            {fileData.totalRows === 0 ? (
-              <Alert
-                type="warning"
-                message="文件中没有找到有效数据"
-                description="请检查文件格式或内容是否正确"
-                showIcon
-              />
-            ) : (
-              <>
-                <div style={{ marginBottom: 16 }}>
-                  <Alert
-                    type="info"
-                    message={`共找到 ${fileData.totalRows} 行数据，${fileData.totalColumns} 列字段`}
-                    showIcon
+              {uploading && (
+                <div style={{ marginTop: 16 }}>
+                  <Progress 
+                    percent={parseProgress} 
+                    status="active"
+                    strokeColor="#1890ff"
                   />
+                  <Text type="secondary">正在解析文件...</Text>
                 </div>
-                
-                <div className="data-preview">
-                  <Table
-                    columns={generateTableColumns()}
-                    dataSource={generateTableData()}
-                    scroll={{ x: true, y: 400 }}
-                    pagination={false}
-                    size="small"
-                    bordered
+              )}
+            </Card>
+          ) : (
+            /* 文件信息展示 */
+            <Card 
+              title="已上传文件"
+              extra={
+                <Button 
+                  type="text" 
+                  danger 
+                  icon={<DeleteOutlined />}
+                  onClick={handleRemoveFile}
+                >
+                  移除文件
+                </Button>
+              }
+            >
+              <Row gutter={24}>
+                <Col span={6}>
+                  <Statistic
+                    title="文件名"
+                    value={fileData.fileName}
+                    prefix={<FileTextOutlined />}
+                    valueStyle={{ fontSize: 16 }}
                   />
-                </div>
-
-                {fileData.totalRows > 10 && (
-                  <div style={{ marginTop: 8, textAlign: 'center' }}>
-                    <Text type="secondary">
-                      仅显示前 10 行数据，完整数据共 {fileData.totalRows} 行
-                    </Text>
-                  </div>
-                )}
-              </>
-            )}
-          </Card>
-        )}
-
-        {/* 字段信息 */}
-        {hasFileData && fileData.headers.length > 0 && (
-          <Card title="字段信息">
-            <Row gutter={[16, 8]}>
-              {fileData.headers.map((header, index) => (
-                <Col key={index} span={6}>
-                  <Card size="small" style={{ textAlign: 'center' }}>
-                    <Text strong>第 {index + 1} 列</Text>
-                    <br />
-                    <Text>{header}</Text>
-                  </Card>
                 </Col>
-              ))}
-            </Row>
-          </Card>
-        )}
+                <Col span={6}>
+                  <Statistic
+                    title="文件大小"
+                    value={formatFileSize(fileData.fileSize)}
+                    valueStyle={{ fontSize: 16 }}
+                  />
+                </Col>
+                <Col span={6}>
+                  <Statistic
+                    title="数据行数"
+                    value={fileData.totalRows}
+                    valueStyle={{ fontSize: 16 }}
+                  />
+                </Col>
+                <Col span={6}>
+                  <Statistic
+                    title="数据列数"
+                    value={fileData.totalColumns}
+                    valueStyle={{ fontSize: 16 }}
+                  />
+                </Col>
+              </Row>
+              
+              <div style={{ marginTop: 16 }}>
+                <Space>
+                  <Tag color={getFileTypeColor(fileData.fileType)}>
+                    {fileData.fileType?.toUpperCase()}
+                  </Tag>
+                  <Tag>{fileData.encoding}</Tag>
+                  {fileData.parseInfo && (
+                    <Text type="secondary">
+                      {fileData.fileType === 'excel' && `工作表: ${fileData.parseInfo.sheetName}`}
+                      {fileData.fileType === 'csv' && `分隔符: ${fileData.parseInfo.delimiter}`}
+                      {fileData.fileType === 'json' && `类型: ${fileData.parseInfo.originalType}`}
+                    </Text>
+                  )}
+                </Space>
+              </div>
+            </Card>
+          )}
 
-        {/* 使用说明 */}
-        <Card title="使用说明" size="small">
+          {/* 数据预览 */}
+          {hasFileData && (
+            <Card 
+              title={
+                <Space>
+                  <EyeOutlined />
+                  数据预览
+                  <Text type="secondary">（显示前 10 行）</Text>
+                </Space>
+              }
+            >
+              {fileData.totalRows === 0 ? (
+                <Alert
+                  type="warning"
+                  message="文件中没有找到有效数据"
+                  description="请检查文件格式或内容是否正确"
+                  showIcon
+                />
+              ) : (
+                <>
+                  <div style={{ marginBottom: 16 }}>
+                    <Alert
+                      type="info"
+                      message={`共找到 ${fileData.totalRows} 行数据，${fileData.totalColumns} 列字段`}
+                      showIcon
+                    />
+                  </div>
+                  
+                  <div className="data-preview">
+                    <Table
+                      columns={generateTableColumns()}
+                      dataSource={generateTableData()}
+                      scroll={{ x: true, y: 400 }}
+                      pagination={false}
+                      size="small"
+                      bordered
+                    />
+                  </div>
+
+                  {fileData.totalRows > 10 && (
+                    <div style={{ marginTop: 8, textAlign: 'center' }}>
+                      <Text type="secondary">
+                        仅显示前 10 行数据，完整数据共 {fileData.totalRows} 行
+                      </Text>
+                    </div>
+                  )}
+                </>
+              )}
+            </Card>
+          )}
+
+          {/* 字段信息 */}
+          {hasFileData && fileData.headers.length > 0 && (
+            <Card title="字段信息">
+              <Row gutter={[16, 8]}>
+                {fileData.headers.map((header, index) => (
+                  <Col key={index} span={6}>
+                    <Card size="small" style={{ textAlign: 'center' }}>
+                      <Text strong>第 {index + 1} 列</Text>
+                      <br />
+                      <Text>{header}</Text>
+                    </Card>
+                  </Col>
+                ))}
+              </Row>
+            </Card>
+          )}
+        </Space>
+      </Col>
+
+      {/* 右侧使用说明 */}
+      <Col span={8}>
+        <Card title="使用说明" size="small" style={{ position: 'sticky', top: 24 }}>
           <Space direction="vertical" size="small">
-            <Text>• <strong>CSV文件：</strong> 确保首行为字段标题，使用UTF-8编码</Text>
-            <Text>• <strong>Excel文件：</strong> 系统将读取第一个工作表，首行为字段标题</Text>
-            <Text>• <strong>JSON文件：</strong> 支持对象数组格式，如 {`[{"name": "张三", "age": 25}]`}</Text>
-            <Text>• <strong>文件限制：</strong> 最大50MB，如需处理更大文件请先分割</Text>
-            <Text type="secondary">💡 提示：上传文件后可在下一步选择要处理的字段</Text>
+            <div>
+              <Text strong>支持格式：</Text>
+              <ul style={{ marginTop: 8, marginLeft: 16, color: '#666' }}>
+                <li><strong>CSV文件：</strong>确保首行为字段标题，使用UTF-8编码</li>
+                <li><strong>Excel文件：</strong>系统将读取第一个工作表，首行为字段标题</li>
+                <li><strong>JSON文件：</strong>支持对象数组格式，如 {`[{"name": "张三", "age": 25}]`}</li>
+              </ul>
+            </div>
+            <div>
+              <Text strong>文件要求：</Text>
+              <ul style={{ marginTop: 8, marginLeft: 16, color: '#666' }}>
+                <li>文件大小：最大 50MB</li>
+                <li>数据格式：第一行必须是字段标题</li>
+                <li>编码格式：建议使用 UTF-8 编码</li>
+                <li>数据完整性：避免空行和不完整数据</li>
+              </ul>
+            </div>
+            <div>
+              <Text strong>处理流程：</Text>
+              <ol style={{ marginTop: 8, marginLeft: 16, color: '#666' }}>
+                <li>上传数据文件</li>
+                <li>预览数据结构</li>
+                <li>选择要处理的字段</li>
+                <li>配置处理提示词</li>
+                <li>执行批量处理</li>
+              </ol>
+            </div>
+            <Text type="secondary">
+              💡 提示：上传文件后可在下一步选择要处理的字段
+            </Text>
           </Space>
         </Card>
-      </Space>
-    </div>
+      </Col>
+    </Row>
   )
 }
 
