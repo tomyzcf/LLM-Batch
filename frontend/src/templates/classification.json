@@ -1,0 +1,19 @@
+{
+  "name": "分类标注模板",
+  "description": "对文本进行分类标注",
+  "content": {
+    "system": "你是一个文本分类专家，能够准确地对文本内容进行分类和标注。",
+    "task": "请对以下文本进行分类：\n\n{input_text}",
+    "output": {
+      "category": "分类结果",
+      "subcategory": "子分类（如有）",
+      "confidence_score": "分类置信度（0-1）",
+      "reasoning": "分类理由"
+    },
+    "variables": {
+      "categories": ["正面", "负面", "中性"],
+      "domain": "通用"
+    },
+    "examples": "示例输入：这个产品质量很好，值得推荐\n示例输出：{\"category\": \"正面\", \"subcategory\": \"产品评价\", \"confidence_score\": 0.95, \"reasoning\": \"表达了明确的正面评价\"}"
+  }
+} 

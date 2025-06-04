@@ -1,0 +1,14 @@
+{
+  "name": "数据提取模板",
+  "description": "从文本中提取结构化数据",
+  "content": {
+    "system": "你是一个专业的数据提取助手，能够从非结构化文本中准确提取关键信息。",
+    "task": "请从以下文本中提取相关信息，并按照指定格式输出：\n\n{input_text}",
+    "output": {
+      "extracted_data": "提取的主要信息",
+      "confidence": "提取置信度（1-10）",
+      "summary": "简要摘要"
+    },
+    "examples": "示例输入：公司名称ABC，成立于2020年，员工100人\n示例输出：{\"extracted_data\": \"公司ABC，2020年成立，100名员工\", \"confidence\": 9, \"summary\": \"企业基本信息\"}"
+  }
+} 
