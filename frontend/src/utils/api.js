@@ -61,14 +61,14 @@ class ApiService {
       const formData = new FormData()
       formData.append('file', file)
       
-      const response = await fetch(`${this.baseURL}/upload`, {
+      const response = await fetch(`${this.baseURL}/api/upload`, {
         method: 'POST',
         body: formData
       })
       
       if (response.ok) {
         const result = await response.json()
-        return { success: true, file: result }
+        return { success: true, file: result.file }
       } else {
         throw new Error('上传失败')
       }
@@ -80,7 +80,7 @@ class ApiService {
   // 生成配置文件
   async generateConfig(apiConfig, promptConfig) {
     try {
-      const response = await fetch(`${this.baseURL}/generate-config`, {
+      const response = await fetch(`${this.baseURL}/api/generate-config`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -102,7 +102,7 @@ class ApiService {
   // 执行任务
   async executeTask(taskParams) {
     try {
-      const response = await fetch(`${this.baseURL}/execute`, {
+      const response = await fetch(`${this.baseURL}/api/execute-task`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -124,7 +124,7 @@ class ApiService {
   // 下载结果
   downloadResult(filename) {
     const link = document.createElement('a')
-    link.href = `${this.baseURL}/download/${filename}`
+    link.href = `${this.baseURL}/api/download/${filename}`
     link.download = filename
     document.body.appendChild(link)
     link.click()
@@ -134,7 +134,7 @@ class ApiService {
   // 测试API连接
   async testConnection(apiConfig) {
     try {
-      const response = await fetch(`${this.baseURL}/test-api`, {
+      const response = await fetch(`${this.baseURL}/api/test-api`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

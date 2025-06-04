@@ -66,13 +66,18 @@ function DataUpload() {
       setParsing(true)
       const parsedData = await parseFile(file)
       
+      // 处理预览数据格式 - 将对象数组转换为数组数组
+      const previewData = parsedData.preview ? parsedData.preview.map(row => {
+        return parsedData.headers.map(header => row[header] || '')
+      }) : []
+      
       // 更新文件数据
       setFileData({
         fileName: file.name,
         fileSize: file.size,
         totalRows: parsedData.totalRows,
         totalColumns: parsedData.totalColumns,
-        previewData: parsedData.previewData,
+        previewData: previewData,
         headers: parsedData.headers,
         uploadedFile: uploadedFile
       })
