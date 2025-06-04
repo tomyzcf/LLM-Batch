@@ -9,6 +9,7 @@ html, body {
   height: 100%;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
     'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 15px; /* 增大基础字体大小 */
 }
 
 #root {
@@ -53,7 +54,118 @@ html, body {
 .app-content {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 24px; /* 增大内边距 */
+}
+
+/* 侧边栏样式 */
+.app-sidebar {
+  background: white;
+  border-right: 1px solid #f0f0f0;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+}
+
+.sidebar-container {
+  height: 100%;
+  padding: 16px 0;
+}
+
+.sidebar-header {
+  padding: 0 24px;
+  border-bottom: 1px solid #f0f0f0;
+  margin-bottom: 8px;
+}
+
+.sidebar-menu {
+  border: none;
+  padding: 0 16px;
+}
+
+.sidebar-menu .ant-menu-item {
+  height: auto;
+  line-height: 1.4;
+  margin: 8px 0;
+  border-radius: 8px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: flex-start;
+}
+
+.sidebar-menu .ant-menu-item-icon {
+  font-size: 18px;
+  margin-right: 12px;
+  margin-top: 2px;
+  min-width: 18px;
+}
+
+.sidebar-menu-item {
+  flex: 1;
+}
+
+.sidebar-step-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #262626;
+  margin-bottom: 4px;
+}
+
+.sidebar-step-desc {
+  font-size: 13px;
+  color: #8c8c8c;
+  line-height: 1.3;
+}
+
+/* 侧边栏步骤状态样式 */
+.sidebar-step-finish {
+  background: #f6ffed;
+  border: 1px solid #b7eb8f;
+}
+
+.sidebar-step-finish .sidebar-step-title {
+  color: #52c41a;
+}
+
+.sidebar-step-finish .ant-menu-item-icon {
+  color: #52c41a;
+}
+
+.sidebar-step-process {
+  background: #e6f7ff;
+  border: 1px solid #91d5ff;
+}
+
+.sidebar-step-process .sidebar-step-title {
+  color: #1890ff;
+}
+
+.sidebar-step-process .ant-menu-item-icon {
+  color: #1890ff;
+}
+
+.sidebar-step-current {
+  background: #1890ff !important;
+  color: white !important;
+}
+
+.sidebar-step-current .sidebar-step-title,
+.sidebar-step-current .sidebar-step-desc,
+.sidebar-step-current .ant-menu-item-icon {
+  color: white !important;
+}
+
+.sidebar-menu .ant-menu-item-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 主内容区域 */
+.main-content {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 步骤指示器样式 */
@@ -65,28 +177,78 @@ html, body {
 }
 
 .step-content {
-  padding: 24px;
-  min-height: 400px;
+  padding: 32px; /* 增大内边距 */
+  min-height: 500px; /* 增大最小高度 */
+  flex: 1;
+  overflow-y: auto;
 }
 
 .step-actions {
-  padding: 16px 24px;
+  padding: 20px 32px; /* 增大内边距 */
   border-top: 1px solid #f0f0f0;
   background: #fafafa;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
+}
+
+/* 增大组件字体大小 */
+.ant-form-item-label > label {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ant-input,
+.ant-select-selector,
+.ant-radio-button-wrapper,
+.ant-btn {
+  font-size: 15px;
+}
+
+.ant-card-head-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ant-card-body {
+  font-size: 15px;
+}
+
+.ant-typography {
+  font-size: 15px;
+}
+
+.ant-typography h1 {
+  font-size: 32px;
+}
+
+.ant-typography h2 {
+  font-size: 26px;
+}
+
+.ant-typography h3 {
+  font-size: 22px;
+}
+
+.ant-typography h4 {
+  font-size: 18px;
+}
+
+.ant-typography h5 {
+  font-size: 16px;
 }
 
 /* 文件上传区域 */
 .upload-area {
   border: 2px dashed #d9d9d9;
   border-radius: 8px;
-  padding: 40px;
+  padding: 50px; /* 增大内边距 */
   text-align: center;
   background: #fafafa;
   transition: all 0.3s;
   cursor: pointer;
+  font-size: 16px; /* 增大字体 */
 }
 
 .upload-area:hover,
@@ -102,10 +264,19 @@ html, body {
 
 /* 数据预览表格 */
 .data-preview {
-  max-height: 400px;
+  max-height: 450px; /* 增大表格高度 */
   overflow: auto;
   border: 1px solid #f0f0f0;
   border-radius: 6px;
+}
+
+.data-preview .ant-table-thead > tr > th {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.data-preview .ant-table-tbody > tr > td {
+  font-size: 14px;
 }
 
 /* 字段选择区域 */
@@ -113,14 +284,15 @@ html, body {
   background: white;
   border: 1px solid #f0f0f0;
   border-radius: 6px;
-  padding: 16px;
+  padding: 20px; /* 增大内边距 */
 }
 
 .field-item {
   display: flex;
   align-items: center;
-  padding: 8px 0;
+  padding: 12px 0; /* 增大行高 */
   border-bottom: 1px solid #f0f0f0;
+  font-size: 15px;
 }
 
 .field-item:last-child {
@@ -129,37 +301,38 @@ html, body {
 
 /* 提示词编辑器 */
 .prompt-editor {
-  height: 400px;
+  height: 450px; /* 增大编辑器高度 */
   border: 1px solid #d9d9d9;
   border-radius: 6px;
   overflow: hidden;
+  font-size: 15px;
 }
 
 /* 任务监控区域 */
 .task-monitor {
   background: white;
   border-radius: 8px;
-  padding: 24px;
+  padding: 32px; /* 增大内边距 */
 }
 
 .progress-section {
-  margin-bottom: 24px;
+  margin-bottom: 32px; /* 增大间距 */
 }
 
 .log-section {
   background: #001529;
   color: #fff;
-  padding: 16px;
+  padding: 20px; /* 增大内边距 */
   border-radius: 6px;
-  height: 300px;
+  height: 350px; /* 增大日志区域高度 */
   overflow-y: auto;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 14px; /* 增大日志字体 */
+  line-height: 1.5; /* 增大行高 */
 }
 
 .log-entry {
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .log-entry.error {
@@ -177,29 +350,30 @@ html, body {
 /* 配置摘要卡片 */
 .config-summary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); /* 增大最小宽度 */
+  gap: 20px; /* 增大间距 */
+  margin-bottom: 32px; /* 增大间距 */
 }
 
 .config-card {
   background: white;
   border: 1px solid #f0f0f0;
   border-radius: 8px;
-  padding: 16px;
+  padding: 20px; /* 增大内边距 */
 }
 
 .config-card-title {
   font-weight: 600;
-  margin-bottom: 12px;
+  margin-bottom: 16px; /* 增大间距 */
   color: #262626;
+  font-size: 16px; /* 增大字体 */
 }
 
 .config-item {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 8px;
-  font-size: 14px;
+  margin-bottom: 12px; /* 增大间距 */
+  font-size: 15px; /* 增大字体 */
 }
 
 .config-item:last-child {
@@ -218,14 +392,30 @@ html, body {
 /* 响应式设计 */
 @media (max-width: 768px) {
   .app-content {
-    padding: 12px;
+    padding: 16px;
   }
   
   .step-content {
-    padding: 16px;
+    padding: 20px;
   }
   
   .config-summary {
     grid-template-columns: 1fr;
+  }
+
+  .app-sidebar {
+    width: 250px !important;
+  }
+
+  .sidebar-menu .ant-menu-item {
+    padding: 12px 16px;
+  }
+
+  .sidebar-step-title {
+    font-size: 15px;
+  }
+
+  .sidebar-step-desc {
+    font-size: 12px;
   }
 } 
