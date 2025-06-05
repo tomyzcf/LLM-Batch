@@ -545,9 +545,9 @@ function DataPreparation() {
                     action={
                       <Button 
                         type="primary" 
-                        onClick={() => setCurrentStep(3)}
+                        onClick={() => setCurrentStep(2)}
                       >
-                        下一步：提示词配置
+                        下一步：API配置
                       </Button>
                     }
                   />

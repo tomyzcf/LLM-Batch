@@ -21,15 +21,15 @@ const { Title } = Typography
 const STEPS = [
   {
     key: '1',
-    title: 'API配置',
-    icon: <ApiOutlined />,
-    description: '配置API提供商和认证信息'
-  },
-  {
-    key: '2',
     title: '数据准备',
     icon: <CloudUploadOutlined />,
     description: '上传数据文件并选择处理字段和范围'
+  },
+  {
+    key: '2',
+    title: 'API配置',
+    icon: <ApiOutlined />,
+    description: '配置API提供商和认证信息'
   },
   {
     key: '3',
@@ -58,15 +58,15 @@ function App() {
   const renderStepContent = () => {
     switch (currentStep) {
       case 1:
-        return <ApiConfig />
-      case 2:
         return <DataPreparation />
+      case 2:
+        return <ApiConfig />
       case 3:
         return <PromptConfig />
       case 4:
         return <TaskExecution />
       default:
-        return <ApiConfig />
+        return <DataPreparation />
     }
   }
 

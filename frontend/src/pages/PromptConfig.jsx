@@ -321,7 +321,7 @@ function PromptConfig() {
                 action={
                   <Button 
                     type="primary" 
-                    onClick={() => setCurrentStep(5)}
+                    onClick={() => setCurrentStep(4)}
                   >
                     下一步：任务执行
                   </Button>

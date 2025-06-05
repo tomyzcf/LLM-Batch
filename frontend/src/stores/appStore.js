@@ -303,17 +303,17 @@ const useAppStore = create((set, get) => ({
     
     const stepValidations = {
       1: () => {
-        // API配置验证
-        return state.apiConfig.provider && 
-               state.apiConfig.api_url && 
-               state.apiConfig.api_key
-      },
-      2: () => {
         // 数据准备验证（文件上传 + 字段选择）
         return state.fileData.fileName && 
                state.fieldSelection.selectedFields.length > 0 &&
                state.fieldSelection.startRow &&
                state.fieldSelection.endRow
+      },
+      2: () => {
+        // API配置验证
+        return state.apiConfig.provider && 
+               state.apiConfig.api_url && 
+               state.apiConfig.api_key
       },
       3: () => {
         // 提示词配置验证
