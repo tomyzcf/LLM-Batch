@@ -324,15 +324,14 @@ const useAppStore = create((set, get) => ({
       1: () => {
         // 数据准备验证（文件上传 + 字段选择）
         return state.fileData.fileName && 
-               state.fieldSelection.selectedFields.length > 0 &&
-               state.fieldSelection.startRow &&
-               state.fieldSelection.endRow
+               state.fileData.headers.length > 0 && 
+               state.fieldSelection.selectedFields.length > 0
       },
       2: () => {
         // API配置验证
-        return state.apiConfig.provider && 
+        return state.apiConfig.api_key && 
                state.apiConfig.api_url && 
-               state.apiConfig.api_key
+               state.apiConfig.model
       },
       3: () => {
         // 提示词配置验证
@@ -341,8 +340,10 @@ const useAppStore = create((set, get) => ({
                state.promptConfig.output
       },
       4: () => {
-        // 任务执行与结果验证（始终返回true，因为是最后一步）
-        return true
+        // 任务执行页面（只要前面步骤都完成就可以）
+        return get().validateStep(1) && 
+               get().validateStep(2) && 
+               get().validateStep(3)
       }
     }
     
@@ -439,7 +440,148 @@ const useAppStore = create((set, get) => ({
       errorLogs: [],
       resultFilePath: null
     }
-  })
+  }),
+
+  // 导出配置文件
+  exportConfig: () => {
+    const state = get()
+    
+    const config = {
+      version: "1.0",
+      timestamp: new Date().toISOString(),
+      apiConfig: {
+        api_type: state.apiConfig.api_type,
+        provider: state.apiConfig.provider,
+        api_url: state.apiConfig.api_url,
+        api_key: state.apiConfig.api_key, // 注意：实际生产环境可能需要考虑安全性
+        model: state.apiConfig.model,
+        app_id: state.apiConfig.app_id
+      },
+      promptConfig: {
+        system: state.promptConfig.system,
+        task: state.promptConfig.task,
+        output: state.promptConfig.output,
+        variables: state.promptConfig.variables,
+        examples: state.promptConfig.examples
+      },
+      metadata: {
+        description: "LLM批处理工具配置文件",
+        exportTime: new Date().toLocaleString('zh-CN')
+      }
+    }
+    
+    // 创建下载链接
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `llm-batch-config-${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    
+    return config
+  },
+
+  // 导入配置文件
+  importConfig: async (file) => {
+    try {
+      const text = await file.text()
+      const config = JSON.parse(text)
+      
+      // 验证配置文件格式
+      if (!config.apiConfig || !config.promptConfig) {
+        throw new Error('配置文件格式不正确，缺少必要的配置项')
+      }
+      
+      const state = get()
+      
+      // 应用API配置
+      if (config.apiConfig) {
+        set({
+          apiConfig: {
+            ...state.apiConfig,
+            ...config.apiConfig
+          }
+        })
+      }
+      
+      // 应用提示词配置
+      if (config.promptConfig) {
+        set({
+          promptConfig: {
+            ...state.promptConfig,
+            ...config.promptConfig
+          }
+        })
+      }
+      
+      // 更新完成状态
+      const newCompletedSteps = [...state.completedSteps]
+      
+      // 如果数据准备已完成，且导入了有效配置，则标记步骤2和3为完成
+      if (get().validateStep(1)) {
+        if (!newCompletedSteps.includes(1)) newCompletedSteps.push(1)
+        if (get().validateStep(2) && !newCompletedSteps.includes(2)) newCompletedSteps.push(2)
+        if (get().validateStep(3) && !newCompletedSteps.includes(3)) newCompletedSteps.push(3)
+      }
+      
+      set({
+        completedSteps: newCompletedSteps
+      })
+      
+      return {
+        success: true,
+        message: '配置文件导入成功！API配置和提示词配置已自动填充。',
+        config: config
+      }
+      
+    } catch (error) {
+      console.error('配置导入失败:', error)
+      return {
+        success: false,
+        message: `配置导入失败: ${error.message}`,
+        error: error
+      }
+    }
+  },
+
+  // 验证配置完整性
+  validateConfigIntegrity: () => {
+    const state = get()
+    
+    const validation = {
+      isValid: true,
+      missingItems: [],
+      warnings: []
+    }
+    
+    // 检查数据准备
+    if (!get().validateStep(1)) {
+      validation.isValid = false
+      validation.missingItems.push('数据准备未完成')
+    }
+    
+    // 检查API配置
+    if (!get().validateStep(2)) {
+      validation.isValid = false
+      validation.missingItems.push('API配置未完成')
+    }
+    
+    // 检查提示词配置
+    if (!get().validateStep(3)) {
+      validation.isValid = false
+      validation.missingItems.push('提示词配置未完成')
+    }
+    
+    // 检查API密钥是否为测试密钥
+    if (state.apiConfig.api_key && state.apiConfig.api_key.startsWith('test-')) {
+      validation.warnings.push('当前使用测试API密钥，请确保在生产环境中使用真实密钥')
+    }
+    
+    return validation
+  }
 }))
 
 export default useAppStore 

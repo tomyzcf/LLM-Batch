@@ -1,11 +1,14 @@
 import React from 'react'
-import { Layout, Steps, Typography, Button, Space, Tooltip, Menu } from 'antd'
+import { Layout, Steps, Typography, Button, Space, Tooltip, Menu, Upload, message } from 'antd'
 import { 
   ApiOutlined, 
   CloudUploadOutlined, 
   EditOutlined, 
   PlayCircleOutlined,
-  HomeOutlined
+  HomeOutlined,
+  DownloadOutlined,
+  UploadOutlined,
+  FileOutlined
 } from '@ant-design/icons'
 import useAppStore from './stores/appStore'
 
@@ -52,7 +55,11 @@ function App() {
     validateCurrentStep, 
     completedSteps,
     reset,
-    taskStatus 
+    taskStatus,
+    exportConfig,
+    importConfig,
+    validateConfigIntegrity,
+    validateStep
   } = useAppStore()
 
   // 渲染当前步骤的内容
@@ -143,6 +150,67 @@ function App() {
     }
   })
 
+  // 处理配置导出
+  const handleExportConfig = () => {
+    try {
+      const validation = validateConfigIntegrity()
+      
+      if (!validation.isValid) {
+        message.warning(`配置不完整，无法导出：${validation.missingItems.join('、')}`)
+        return
+      }
+      
+      if (validation.warnings.length > 0) {
+        validation.warnings.forEach(warning => {
+          message.warning(warning)
+        })
+      }
+      
+      exportConfig()
+      message.success('配置文件导出成功！')
+    } catch (error) {
+      message.error(`导出失败：${error.message}`)
+    }
+  }
+
+  // 处理配置导入
+  const handleImportConfig = async (file) => {
+    try {
+      // 检查是否已完成数据准备
+      if (!validateStep(1)) {
+        message.warning('请先完成数据准备步骤，然后再导入配置文件')
+        return false
+      }
+      
+      const result = await importConfig(file)
+      
+      if (result.success) {
+        message.success(result.message)
+        
+        // 自动跳转到任务执行页面
+        setTimeout(() => {
+          setCurrentStep(4)
+          message.info('已自动跳转到任务执行页面')
+        }, 1000)
+      } else {
+        message.error(result.message)
+      }
+    } catch (error) {
+      message.error(`导入失败：${error.message}`)
+    }
+    
+    return false // 阻止默认上传行为
+  }
+
+  // 配置导入上传属性
+  const importUploadProps = {
+    name: 'configFile',
+    accept: '.json',
+    showUploadList: false,
+    beforeUpload: handleImportConfig,
+    multiple: false
+  }
+
   return (
     <Layout className="app-container">
       <Header className="app-header">
@@ -153,6 +221,34 @@ function App() {
             </Title>
           </div>
           <Space>
+            {/* 配置导入导出按钮 */}
+            {validateStep(1) && (
+              <>
+                <Upload {...importUploadProps}>
+                  <Tooltip title="导入配置文件将自动填充API和提示词配置">
+                    <Button 
+                      icon={<UploadOutlined />}
+                      type="default"
+                    >
+                      导入配置
+                    </Button>
+                  </Tooltip>
+                </Upload>
+                
+                {(validateStep(2) || validateStep(3)) && (
+                  <Tooltip title="导出当前配置为JSON文件">
+                    <Button 
+                      icon={<DownloadOutlined />}
+                      onClick={handleExportConfig}
+                      type="default"
+                    >
+                      导出配置
+                    </Button>
+                  </Tooltip>
+                )}
+              </>
+            )}
+            
             {(taskStatus.currentStatus === 'completed' || isExecutionStep) && (
               <Button 
                 icon={<HomeOutlined />} 

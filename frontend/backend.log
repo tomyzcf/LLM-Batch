@@ -2,7 +2,13 @@
 WebSocket服务器启动在端口 3001
 WebSocket客户端连接
 WebSocket客户端连接
+文件下载错误: Error: ENOENT: no such file or directory, access 'E:\Projects\leagle\outputData\test-data.csv_processed_1749092471006.xlsx'
+    at async Object.access (node:internal/fs/promises:605:10)
+    at async file:///E:/Projects/leagle/frontend/server/index.js:347:5 {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'access',
+  path: 'E:\\Projects\\leagle\\outputData\\test-data.csv_processed_1749092471006.xlsx'
+}
 WebSocket客户端断开
 WebSocket客户端断开
-WebSocket客户端连接
-WebSocket客户端连接
