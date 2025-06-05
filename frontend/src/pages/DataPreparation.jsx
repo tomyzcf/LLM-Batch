@@ -36,7 +36,6 @@ import { parseFile } from '../utils/fileParser'
 
 const { Title, Text, Paragraph } = Typography
 const { Dragger } = Upload
-const { Panel } = Collapse
 
 function DataPreparation() {
   const { 
@@ -467,69 +466,73 @@ function DataPreparation() {
                       message.warning('请先选择要处理的字段')
                     }
                   }}
-                >
-                  <Panel 
-                    header={
-                      <Space>
-                        <SettingOutlined />
-                        处理范围设置
-                        {effectiveStartRow && effectiveEndRow && (
-                          <Tag color="green">
-                            第{effectiveStartRow}-{effectiveEndRow}行 ({effectiveEndRow - effectiveStartRow + 1}行)
-                          </Tag>
-                        )}
-                      </Space>
-                    } 
-                    key="range"
-                    disabled={selectedFields.length === 0}
-                  >
-                    <Row gutter={24}>
-                      <Col span={12}>
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                          <Text strong>起始行数：</Text>
-                          <InputNumber
-                            value={startRow}
-                            onChange={(value) => handleRowRangeChange('start', value)}
-                            min={1}
-                            max={totalDataRows}
-                            style={{ width: '100%' }}
-                            placeholder="从第几行开始处理"
-                          />
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-                            从第几行开始处理数据（包含该行）
-                          </Text>
+                  items={[
+                    {
+                      key: 'range',
+                      label: (
+                        <Space>
+                          <SettingOutlined />
+                          处理范围设置
+                          {effectiveStartRow && effectiveEndRow && (
+                            <Tag color="green">
+                              第{effectiveStartRow}-{effectiveEndRow}行 ({effectiveEndRow - effectiveStartRow + 1}行)
+                            </Tag>
+                          )}
                         </Space>
-                      </Col>
-                      <Col span={12}>
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                          <Text strong>结束行数：</Text>
-                          <InputNumber
-                            value={endRow}
-                            onChange={(value) => handleRowRangeChange('end', value)}
-                            min={effectiveStartRow}
-                            max={totalDataRows}
-                            style={{ width: '100%' }}
-                            placeholder="留空表示处理到最后一行"
-                          />
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-                            处理到第几行结束，留空表示处理到最后一行
-                          </Text>
-                        </Space>
-                      </Col>
-                    </Row>
-                    
-                    {selectedFields.length > 0 && (
-                      <div style={{ marginTop: 16 }}>
-                        <Alert
-                          type="info"
-                          icon={<InfoCircleOutlined />}
-                          message={`将处理第 ${effectiveStartRow} 到第 ${effectiveEndRow} 行，共 ${effectiveEndRow - effectiveStartRow + 1} 行数据`}
-                          showIcon
-                        />
-                      </div>
-                    )}
-                  </Panel>
-                </Collapse>
+                      ),
+                      collapsible: selectedFields.length === 0 ? "disabled" : "header",
+                      children: (
+                        <>
+                          <Row gutter={24}>
+                            <Col span={12}>
+                              <Space direction="vertical" style={{ width: '100%' }}>
+                                <Text strong>起始行数：</Text>
+                                <InputNumber
+                                  value={startRow}
+                                  onChange={(value) => handleRowRangeChange('start', value)}
+                                  min={1}
+                                  max={totalDataRows}
+                                  style={{ width: '100%' }}
+                                  placeholder="从第几行开始处理"
+                                />
+                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                  从第几行开始处理数据（包含该行）
+                                </Text>
+                              </Space>
+                            </Col>
+                            <Col span={12}>
+                              <Space direction="vertical" style={{ width: '100%' }}>
+                                <Text strong>结束行数：</Text>
+                                <InputNumber
+                                  value={endRow}
+                                  onChange={(value) => handleRowRangeChange('end', value)}
+                                  min={effectiveStartRow}
+                                  max={totalDataRows}
+                                  style={{ width: '100%' }}
+                                  placeholder="留空表示处理到最后一行"
+                                />
+                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                  处理到第几行结束，留空表示处理到最后一行
+                                </Text>
+                              </Space>
+                            </Col>
+                          </Row>
+                          
+                          {selectedFields.length > 0 && (
+                            <div style={{ marginTop: 16 }}>
+                              <Alert
+                                type="info"
+                                icon={<InfoCircleOutlined />}
+                                message={`将处理第 ${effectiveStartRow} 到第 ${effectiveEndRow} 行，共 ${effectiveEndRow - effectiveStartRow + 1} 行数据`}
+                                showIcon
+                              />
+                            </div>
+                          )}
+                        </>
+                      )
+                    }
+                  ]}
+                />
 
                 {/* 配置完成提示 */}
                 {isConfigValid && (

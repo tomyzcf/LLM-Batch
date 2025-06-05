@@ -66,7 +66,9 @@ const useAppStore = create((set, get) => ({
   wsConnected: false,
 
   // Actions
-  setCurrentStep: (step) => set({ currentStep: step }),
+  setCurrentStep: (step) => {
+    set({ currentStep: Math.max(1, Math.min(step, 4)) })
+  },
   
   setApiConfig: (config) => set((state) => ({
     apiConfig: { ...state.apiConfig, ...config }
@@ -297,34 +299,34 @@ const useAppStore = create((set, get) => ({
   // 验证当前步骤
   validateCurrentStep: () => {
     const state = get()
+    const { currentStep } = state
     
-    switch (state.currentStep) {
-      case 1: // API配置
-        return !!(state.apiConfig.api_url && 
-                 state.apiConfig.api_key && 
-                 (state.apiConfig.api_type === 'llm' ? state.apiConfig.model : state.apiConfig.app_id))
-      
-      case 2: // 数据准备 (合并了数据上传和字段选择)
-        return !!(state.fileData.fileName && 
-                 state.fileData.totalRows > 0 && 
-                 state.fileData.uploadedFile &&
-                 state.fieldSelection.selectedFields.length > 0 && 
-                 state.fieldSelection.startRow > 0)
-      
-      case 3: // 提示词配置
-        return !!(state.promptConfig.system && 
-                 state.promptConfig.task && 
-                 state.promptConfig.output)
-      
-      case 4: // 任务执行
+    const stepValidations = {
+      1: () => {
+        // API配置验证
+        return state.apiConfig.provider && 
+               state.apiConfig.api_url && 
+               state.apiConfig.api_key
+      },
+      2: () => {
+        // 数据准备验证（文件上传 + 字段选择）
+        return state.fileData.fileName && 
+               state.fieldSelection.selectedFields.length > 0 &&
+               state.fieldSelection.startRow &&
+               state.fieldSelection.endRow
+      },
+      3: () => {
+        // 提示词配置验证
+        return state.promptConfig.template && 
+               state.promptConfig.format
+      },
+      4: () => {
+        // 任务执行与结果验证（始终返回true，因为是最后一步）
         return true
-      
-      case 5: // 结果查看
-        return state.taskStatus.currentStatus === 'completed'
-      
-      default:
-        return false
+      }
     }
+    
+    return stepValidations[currentStep] ? stepValidations[currentStep]() : false
   },
   
   // 获取配置摘要

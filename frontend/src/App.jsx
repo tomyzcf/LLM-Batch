@@ -5,7 +5,6 @@ import {
   CloudUploadOutlined, 
   EditOutlined, 
   PlayCircleOutlined,
-  CheckCircleOutlined,
   HomeOutlined
 } from '@ant-design/icons'
 import useAppStore from './stores/appStore'
@@ -15,7 +14,6 @@ import ApiConfig from './pages/ApiConfig'
 import DataPreparation from './pages/DataPreparation'
 import PromptConfig from './pages/PromptConfig'
 import TaskExecution from './pages/TaskExecution'
-import Results from './pages/Results'
 
 const { Header, Content, Sider } = Layout
 const { Title } = Typography
@@ -41,15 +39,9 @@ const STEPS = [
   },
   {
     key: '4',
-    title: '任务执行',
+    title: '任务执行与结果',
     icon: <PlayCircleOutlined />,
-    description: '执行批处理任务并监控进度'
-  },
-  {
-    key: '5',
-    title: '处理结果',
-    icon: <CheckCircleOutlined />,
-    description: '查看处理结果和统计信息'
+    description: '执行批处理任务并查看处理结果'
   }
 ]
 
@@ -73,8 +65,6 @@ function App() {
         return <PromptConfig />
       case 4:
         return <TaskExecution />
-      case 5:
-        return <Results />
       default:
         return <ApiConfig />
     }
@@ -83,18 +73,13 @@ function App() {
   // 处理下一步
   const handleNext = () => {
     if (validateCurrentStep()) {
-      setCurrentStep(Math.min(currentStep + 1, 5))
+      setCurrentStep(Math.min(currentStep + 1, 4))
     }
   }
 
   // 处理上一步
   const handlePrevious = () => {
-    // 如果在结果页面，返回到任务执行页面
-    if (currentStep === 5) {
-      setCurrentStep(4)
-    } else {
-      setCurrentStep(Math.max(currentStep - 1, 1))
-    }
+    setCurrentStep(Math.max(currentStep - 1, 1))
   }
 
   // 处理步骤点击
@@ -104,9 +89,9 @@ function App() {
     if (stepNum < currentStep || stepNum === currentStep || (stepNum === currentStep + 1 && validateCurrentStep())) {
       setCurrentStep(stepNum)
     }
-    // 特殊处理：如果任务完成，允许直接跳转到结果页面
-    if (stepNum === 5 && taskStatus.currentStatus === 'completed') {
-      setCurrentStep(5)
+    // 特殊处理：如果任务完成，允许直接跳转到任务执行与结果页面
+    if (stepNum === 4 && taskStatus.currentStatus === 'completed') {
+      setCurrentStep(4)
     }
   }
 
@@ -119,15 +104,15 @@ function App() {
   const getStepStatus = (stepIndex) => {
     if (stepIndex < currentStep) return 'finish'
     if (stepIndex === currentStep) return 'process'
-    if (stepIndex === 5 && taskStatus.currentStatus === 'completed') return 'finish'
+    if (stepIndex === 4 && taskStatus.currentStatus === 'completed') return 'finish'
     return 'wait'
   }
 
   // 当前步骤是否可以继续
   const canProceed = validateCurrentStep()
-  const isLastStep = currentStep === 5
+  const isLastStep = currentStep === 4
   const isFirstStep = currentStep === 1
-  const isResultStep = currentStep === 5
+  const isExecutionStep = currentStep === 4
 
   // 生成侧边栏菜单项
   const menuItems = STEPS.map((step, index) => {
@@ -135,7 +120,7 @@ function App() {
     const isClickable = stepNum < currentStep || 
                        stepNum === currentStep || 
                        (stepNum === currentStep + 1 && canProceed) ||
-                       (stepNum === 5 && taskStatus.currentStatus === 'completed')
+                       (stepNum === 4 && taskStatus.currentStatus === 'completed')
     
     const status = getStepStatus(stepNum)
     
@@ -163,7 +148,7 @@ function App() {
             </Title>
           </div>
           <Space>
-            {(taskStatus.currentStatus === 'completed' || isResultStep) && (
+            {(taskStatus.currentStatus === 'completed' || isExecutionStep) && (
               <Button 
                 icon={<HomeOutlined />} 
                 onClick={handleRestart}
@@ -209,7 +194,7 @@ function App() {
               </div>
 
               {/* 步骤操作按钮 */}
-              {!isResultStep && (
+              {!isExecutionStep && (
                 <div className="step-actions">
                   <div>
                     {!isFirstStep && (
@@ -230,15 +215,6 @@ function App() {
                           下一步
                         </Button>
                       </Tooltip>
-                    )}
-                    {currentStep === 4 && taskStatus.currentStatus === 'completed' && (
-                      <Button 
-                        type="primary" 
-                        onClick={() => setCurrentStep(5)}
-                        size="large"
-                      >
-                        查看结果
-                      </Button>
                     )}
                   </div>
                 </div>
