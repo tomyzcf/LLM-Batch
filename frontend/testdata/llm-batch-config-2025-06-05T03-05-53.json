@@ -1,0 +1,23 @@
+{
+  "version": "1.0",
+  "timestamp": "2025-06-05T03:05:53.559Z",
+  "apiConfig": {
+    "api_type": "llm",
+    "provider": "deepseek",
+    "api_url": "https://api.deepseek.com",
+    "api_key": "sk-deccd1a8a9c14ce89272ac6e371b0b8e",
+    "model": "deepseek-chat",
+    "app_id": ""
+  },
+  "promptConfig": {
+    "system": "你是一个专业的内容创作助手，能够根据用户提供的信息生成高质量的文本内容。",
+    "task": "请基于以下信息生成相关内容：\n\n{input_text}",
+    "output": "{\n  \"generated_content\": \"生成的主要内容\",\n  \"word_count\": \"字数统计\",\n  \"style\": \"内容风格\",\n  \"keywords\": \"关键词列表\"\n}",
+    "variables": "{\n  \"style\": \"正式\",\n  \"length\": \"中等\",\n  \"language\": \"中文\"\n}",
+    "examples": "示例输入：产品介绍：智能手表，具有健康监测功能\n示例输出：{\"generated_content\": \"这款智能手表采用先进的健康监测技术...\", \"word_count\": 150, \"style\": \"营销文案\", \"keywords\": [\"智能手表\", \"健康监测\", \"科技\"]}"
+  },
+  "metadata": {
+    "description": "LLM批处理工具配置文件",
+    "exportTime": "2025/6/5 11:05:53"
+  }
+}

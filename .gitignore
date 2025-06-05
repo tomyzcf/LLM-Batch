@@ -62,6 +62,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+frontend/backend.log
 
 # Build outputs
 dist/
