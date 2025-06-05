@@ -87,7 +87,7 @@ function App() {
 
   // 处理上一步
   const handlePrevious = () => {
-    setCurrentStep(Math.max(currentStep - 1, 1))
+      setCurrentStep(Math.max(currentStep - 1, 1))
   }
 
   // 处理步骤点击

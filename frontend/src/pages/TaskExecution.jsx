@@ -680,7 +680,7 @@ function TaskExecution() {
                     {error.detail && (
                       <div style={{ marginTop: 4 }}>
                         <Text type="secondary" style={{ fontSize: 12 }}>{error.detail}</Text>
-                      </div>
+              </div>
                     )}
                   </div>
                 ))}
@@ -907,21 +907,21 @@ function TaskExecution() {
             {pagePhase === 'running' && renderRunningContent()}
             {pagePhase === 'completed' && renderCompletedContent()}
 
-            {/* 任务失败提示 */}
-            {taskStatus.currentStatus === 'error' && (
-              <Alert
-                type="error"
-                message="任务执行失败"
-                description="任务执行过程中发生错误，请检查错误日志并重新配置后重试。"
-                showIcon
-                action={
-                  <Space>
-                    <Button size="small" onClick={() => setCurrentStep(1)}>重新配置</Button>
-                    <Button size="small" type="primary" onClick={handleStartTask}>重新执行</Button>
-                  </Space>
-                }
-              />
-            )}
+        {/* 任务失败提示 */}
+        {taskStatus.currentStatus === 'error' && (
+          <Alert
+            type="error"
+            message="任务执行失败"
+            description="任务执行过程中发生错误，请检查错误日志并重新配置后重试。"
+            showIcon
+            action={
+              <Space>
+                <Button size="small" onClick={() => setCurrentStep(1)}>重新配置</Button>
+                <Button size="small" type="primary" onClick={handleStartTask}>重新执行</Button>
+              </Space>
+            }
+          />
+        )}
           </Space>
         </Col>
 
