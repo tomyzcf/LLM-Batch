@@ -5,6 +5,9 @@ const useAppStore = create((set, get) => ({
   // 当前步骤
   currentStep: 1,
   
+  // 已完成的步骤
+  completedSteps: [],
+  
   // API配置
   apiConfig: {
     api_type: 'llm', // 默认选择LLM类型
@@ -67,7 +70,24 @@ const useAppStore = create((set, get) => ({
 
   // Actions
   setCurrentStep: (step) => {
-    set({ currentStep: Math.max(1, Math.min(step, 4)) })
+    const targetStep = Math.max(1, Math.min(step, 4))
+    set((state) => {
+      // 更新已完成的步骤
+      const newCompletedSteps = [...state.completedSteps]
+      
+      // 检查并更新所有应该被标记为已完成的步骤
+      for (let i = 1; i <= Math.max(state.currentStep, targetStep); i++) {
+        if (get().validateStep(i) && !newCompletedSteps.includes(i)) {
+          newCompletedSteps.push(i)
+        }
+      }
+      
+      return {
+        ...state,
+        currentStep: targetStep,
+        completedSteps: newCompletedSteps
+      }
+    })
   },
   
   setApiConfig: (config) => set((state) => ({
@@ -296,10 +316,9 @@ const useAppStore = create((set, get) => ({
     }
   },
   
-  // 验证当前步骤
-  validateCurrentStep: () => {
+  // 验证指定步骤
+  validateStep: (stepNumber) => {
     const state = get()
-    const { currentStep } = state
     
     const stepValidations = {
       1: () => {
@@ -317,8 +336,9 @@ const useAppStore = create((set, get) => ({
       },
       3: () => {
         // 提示词配置验证
-        return state.promptConfig.template && 
-               state.promptConfig.format
+        return state.promptConfig.system && 
+               state.promptConfig.task && 
+               state.promptConfig.output
       },
       4: () => {
         // 任务执行与结果验证（始终返回true，因为是最后一步）
@@ -326,7 +346,13 @@ const useAppStore = create((set, get) => ({
       }
     }
     
-    return stepValidations[currentStep] ? stepValidations[currentStep]() : false
+    return stepValidations[stepNumber] ? stepValidations[stepNumber]() : false
+  },
+  
+  // 验证当前步骤
+  validateCurrentStep: () => {
+    const state = get()
+    return get().validateStep(state.currentStep)
   },
   
   // 获取配置摘要
@@ -365,6 +391,7 @@ const useAppStore = create((set, get) => ({
   // 重置所有状态
   reset: () => set({
     currentStep: 1,
+    completedSteps: [],
     apiConfig: {
       api_type: 'llm',
       provider: 'deepseek',

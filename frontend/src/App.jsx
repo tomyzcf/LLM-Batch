@@ -50,6 +50,7 @@ function App() {
     currentStep, 
     setCurrentStep, 
     validateCurrentStep, 
+    completedSteps,
     reset,
     taskStatus 
   } = useAppStore()
@@ -85,13 +86,14 @@ function App() {
   // 处理步骤点击
   const handleStepClick = (step) => {
     const stepNum = parseInt(step)
-    // 允许点击已完成的步骤，或当前步骤，或验证通过时的下一步
-    if (stepNum < currentStep || stepNum === currentStep || (stepNum === currentStep + 1 && validateCurrentStep())) {
+    // 允许点击已完成的步骤、当前步骤，或者验证通过时的下一步
+    const isStepCompleted = completedSteps.includes(stepNum)
+    const isCurrentStep = stepNum === currentStep
+    const isNextValidStep = stepNum === currentStep + 1 && validateCurrentStep()
+    const isTaskCompletedStep = stepNum === 4 && taskStatus.currentStatus === 'completed'
+    
+    if (isStepCompleted || isCurrentStep || isNextValidStep || isTaskCompletedStep) {
       setCurrentStep(stepNum)
-    }
-    // 特殊处理：如果任务完成，允许直接跳转到任务执行与结果页面
-    if (stepNum === 4 && taskStatus.currentStatus === 'completed') {
-      setCurrentStep(4)
     }
   }
 
@@ -102,7 +104,7 @@ function App() {
 
   // 获取步骤状态
   const getStepStatus = (stepIndex) => {
-    if (stepIndex < currentStep) return 'finish'
+    if (completedSteps.includes(stepIndex) || stepIndex < currentStep) return 'finish'
     if (stepIndex === currentStep) return 'process'
     if (stepIndex === 4 && taskStatus.currentStatus === 'completed') return 'finish'
     return 'wait'
@@ -117,11 +119,14 @@ function App() {
   // 生成侧边栏菜单项
   const menuItems = STEPS.map((step, index) => {
     const stepNum = index + 1
-    const isClickable = stepNum < currentStep || 
-                       stepNum === currentStep || 
-                       (stepNum === currentStep + 1 && canProceed) ||
-                       (stepNum === 4 && taskStatus.currentStatus === 'completed')
+    const isStepCompleted = completedSteps.includes(stepNum)
+    const isCurrentStep = stepNum === currentStep
+    const isNextValidStep = stepNum === currentStep + 1 && canProceed
+    const isTaskCompletedStep = stepNum === 4 && taskStatus.currentStatus === 'completed'
+    const isPreviousValidStep = stepNum < currentStep  // 允许回到之前的步骤
     
+    // 简化点击判断逻辑：当前步骤、已完成步骤、验证后的下一步、之前的步骤都可点击
+    const isClickable = isCurrentStep || isStepCompleted || isNextValidStep || isTaskCompletedStep || isPreviousValidStep
     const status = getStepStatus(stepNum)
     
     return {

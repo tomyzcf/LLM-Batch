@@ -121,7 +121,20 @@ function DataPreparation() {
         uploadedFile: uploadedFile
       })
       
-      message.success('文件上传和解析完成！')
+      // 自动全选所有字段
+      const allFieldIndexes = parsedData.headers.map((_, index) => index)
+      setSelectedFields(allFieldIndexes)
+      
+      // 更新字段选择状态
+      const selectedFieldNames = allFieldIndexes.map(index => parsedData.headers[index])
+      setFieldSelection({
+        selectedFields: allFieldIndexes,
+        selectedFieldNames: selectedFieldNames,
+        startRow: 1,
+        endRow: parsedData.totalRows
+      })
+      
+      message.success('文件上传和解析完成！已自动选择所有字段')
       
     } catch (error) {
       console.error('文件处理失败:', error)
@@ -133,7 +146,7 @@ function DataPreparation() {
     }
     
     return false
-  }, [uploadFile, setFileData])
+  }, [uploadFile, setFileData, setFieldSelection])
 
   // 删除文件
   const handleRemoveFile = () => {
@@ -539,7 +552,7 @@ function DataPreparation() {
                   <Alert
                     type="success"
                     message="数据准备完成！"
-                    description={`已选择 ${selectedFields.length} 个字段，处理范围为第 ${effectiveStartRow} 到第 ${effectiveEndRow} 行。可以进入下一步进行提示词配置。`}
+                    description={`已选择 ${selectedFields.length} 个字段，处理范围为第 ${effectiveStartRow} 到第 ${effectiveEndRow} 行。可以进入下一步进行API配置。`}
                     icon={<CheckCircleOutlined />}
                     showIcon
                     action={
