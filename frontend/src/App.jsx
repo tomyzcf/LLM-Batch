@@ -3,7 +3,6 @@ import { Layout, Steps, Typography, Button, Space, Tooltip, Menu } from 'antd'
 import { 
   ApiOutlined, 
   CloudUploadOutlined, 
-  TableOutlined, 
   EditOutlined, 
   PlayCircleOutlined,
   CheckCircleOutlined,
@@ -13,8 +12,7 @@ import useAppStore from './stores/appStore'
 
 // 导入页面组件
 import ApiConfig from './pages/ApiConfig'
-import DataUpload from './pages/DataUpload'
-import FieldSelection from './pages/FieldSelection'
+import DataPreparation from './pages/DataPreparation'
 import PromptConfig from './pages/PromptConfig'
 import TaskExecution from './pages/TaskExecution'
 import Results from './pages/Results'
@@ -31,30 +29,24 @@ const STEPS = [
   },
   {
     key: '2',
-    title: '数据上传',
+    title: '数据准备',
     icon: <CloudUploadOutlined />,
-    description: '上传并预览要处理的数据文件'
+    description: '上传数据文件并选择处理字段和范围'
   },
   {
     key: '3',
-    title: '字段选择',
-    icon: <TableOutlined />,
-    description: '选择要处理的字段和数据范围'
-  },
-  {
-    key: '4',
     title: '提示词配置',
     icon: <EditOutlined />,
     description: '设置处理任务的提示词模板'
   },
   {
-    key: '5',
+    key: '4',
     title: '任务执行',
     icon: <PlayCircleOutlined />,
     description: '执行批处理任务并监控进度'
   },
   {
-    key: '6',
+    key: '5',
     title: '处理结果',
     icon: <CheckCircleOutlined />,
     description: '查看处理结果和统计信息'
@@ -76,14 +68,12 @@ function App() {
       case 1:
         return <ApiConfig />
       case 2:
-        return <DataUpload />
+        return <DataPreparation />
       case 3:
-        return <FieldSelection />
-      case 4:
         return <PromptConfig />
-      case 5:
+      case 4:
         return <TaskExecution />
-      case 6:
+      case 5:
         return <Results />
       default:
         return <ApiConfig />
@@ -93,15 +83,15 @@ function App() {
   // 处理下一步
   const handleNext = () => {
     if (validateCurrentStep()) {
-      setCurrentStep(Math.min(currentStep + 1, 6))
+      setCurrentStep(Math.min(currentStep + 1, 5))
     }
   }
 
   // 处理上一步
   const handlePrevious = () => {
     // 如果在结果页面，返回到任务执行页面
-    if (currentStep === 6) {
-      setCurrentStep(5)
+    if (currentStep === 5) {
+      setCurrentStep(4)
     } else {
       setCurrentStep(Math.max(currentStep - 1, 1))
     }
@@ -115,8 +105,8 @@ function App() {
       setCurrentStep(stepNum)
     }
     // 特殊处理：如果任务完成，允许直接跳转到结果页面
-    if (stepNum === 6 && taskStatus.currentStatus === 'completed') {
-      setCurrentStep(6)
+    if (stepNum === 5 && taskStatus.currentStatus === 'completed') {
+      setCurrentStep(5)
     }
   }
 
@@ -129,15 +119,15 @@ function App() {
   const getStepStatus = (stepIndex) => {
     if (stepIndex < currentStep) return 'finish'
     if (stepIndex === currentStep) return 'process'
-    if (stepIndex === 6 && taskStatus.currentStatus === 'completed') return 'finish'
+    if (stepIndex === 5 && taskStatus.currentStatus === 'completed') return 'finish'
     return 'wait'
   }
 
   // 当前步骤是否可以继续
   const canProceed = validateCurrentStep()
-  const isLastStep = currentStep === 6
+  const isLastStep = currentStep === 5
   const isFirstStep = currentStep === 1
-  const isResultStep = currentStep === 6
+  const isResultStep = currentStep === 5
 
   // 生成侧边栏菜单项
   const menuItems = STEPS.map((step, index) => {
@@ -145,7 +135,7 @@ function App() {
     const isClickable = stepNum < currentStep || 
                        stepNum === currentStep || 
                        (stepNum === currentStep + 1 && canProceed) ||
-                       (stepNum === 6 && taskStatus.currentStatus === 'completed')
+                       (stepNum === 5 && taskStatus.currentStatus === 'completed')
     
     const status = getStepStatus(stepNum)
     
@@ -229,7 +219,7 @@ function App() {
                     )}
                   </div>
                   <div>
-                    {currentStep < 5 && (
+                    {currentStep < 4 && (
                       <Tooltip title={!canProceed ? '请完成当前步骤的必填项' : ''}>
                         <Button 
                           type="primary" 
@@ -241,10 +231,10 @@ function App() {
                         </Button>
                       </Tooltip>
                     )}
-                    {currentStep === 5 && taskStatus.currentStatus === 'completed' && (
+                    {currentStep === 4 && taskStatus.currentStatus === 'completed' && (
                       <Button 
                         type="primary" 
-                        onClick={() => setCurrentStep(6)}
+                        onClick={() => setCurrentStep(5)}
                         size="large"
                       >
                         查看结果

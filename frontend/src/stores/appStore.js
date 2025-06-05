@@ -304,24 +304,22 @@ const useAppStore = create((set, get) => ({
                  state.apiConfig.api_key && 
                  (state.apiConfig.api_type === 'llm' ? state.apiConfig.model : state.apiConfig.app_id))
       
-      case 2: // 数据上传
+      case 2: // 数据准备 (合并了数据上传和字段选择)
         return !!(state.fileData.fileName && 
                  state.fileData.totalRows > 0 && 
-                 state.fileData.uploadedFile)
-      
-      case 3: // 字段选择
-        return !!(state.fieldSelection.selectedFields.length > 0 && 
+                 state.fileData.uploadedFile &&
+                 state.fieldSelection.selectedFields.length > 0 && 
                  state.fieldSelection.startRow > 0)
       
-      case 4: // 提示词配置
+      case 3: // 提示词配置
         return !!(state.promptConfig.system && 
                  state.promptConfig.task && 
                  state.promptConfig.output)
       
-      case 5: // 任务执行
+      case 4: // 任务执行
         return true
       
-      case 6: // 结果查看
+      case 5: // 结果查看
         return state.taskStatus.currentStatus === 'completed'
       
       default:
