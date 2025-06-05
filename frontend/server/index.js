@@ -116,24 +116,47 @@ app.post('/api/generate-config', async (req, res) => {
     const configDir = path.join(__dirname, '../../temp/config')
     await fs.mkdir(configDir, { recursive: true })
 
-    // 生成API配置文件 (YAML格式)
+    // 生成API配置文件 (符合Python期望的YAML格式)
     const yamlConfig = {
-      default_provider: apiConfig.api_type === 'llm_compatible' ? 'openai_compatible' : 'dashscope_agent',
-      providers: {}
+      // 设置默认提供商
+      default_provider: 'frontend_generated',
+      
+      // API提供商配置
+      api_providers: {
+        frontend_generated: {
+          api_type: apiConfig.api_type === 'llm' ? 'llm_compatible' : apiConfig.api_type,
+          api_key: apiConfig.api_key,
+          base_url: apiConfig.api_url,
+          concurrent_limit: 5
+        }
+      },
+      
+      // 输出配置
+      output: {
+        format: "csv",
+        save_raw_response: true,
+        encoding: "utf-8-sig"
+      },
+      
+      // 处理配置
+      process: {
+        batch_size: 5,
+        max_retries: 5,
+        retry_interval: 0.5,
+        max_memory_percent: 80
+      }
     }
 
-    if (apiConfig.api_type === 'llm_compatible') {
-      yamlConfig.providers.openai_compatible = {
-        api_url: apiConfig.api_url,
-        api_key: apiConfig.api_key,
-        model: apiConfig.model
+    // 根据API类型添加特定配置
+    if (apiConfig.api_type === 'llm' || apiConfig.api_type === 'llm_compatible') {
+      yamlConfig.api_providers.frontend_generated.model = apiConfig.model || 'deepseek-chat'
+      yamlConfig.api_providers.frontend_generated.model_params = {
+        temperature: 0.7,
+        top_p: 0.8,
+        max_tokens: 2000
       }
-    } else {
-      yamlConfig.providers.dashscope_agent = {
-        api_url: apiConfig.api_url,
-        api_key: apiConfig.api_key,
-        app_id: apiConfig.app_id
-      }
+    } else if (apiConfig.api_type === 'aliyun_agent') {
+      yamlConfig.api_providers.frontend_generated.app_id = apiConfig.app_id
     }
 
     const configPath = path.join(configDir, 'config.yaml')
@@ -142,6 +165,9 @@ app.post('/api/generate-config', async (req, res) => {
     // 生成提示词文件
     const promptPath = path.join(configDir, 'prompt.json')
     await fs.writeFile(promptPath, JSON.stringify(promptConfig, null, 2))
+
+    console.log('生成配置文件:', configPath)
+    console.log('配置内容:', yamlConfig)
 
     res.json({
       success: true,
@@ -168,11 +194,22 @@ app.post('/api/execute-task', async (req, res) => {
 
     // 构建Python命令
     const pythonScript = path.join(__dirname, '../../main.py')
+    // 指定输出目录为 outputData（与项目根目录下的 outputData 保持一致）
+    const outputDir = 'outputData'
+    
     const args = [
       pythonScript,
       inputFile,
       promptPath
     ]
+
+    // 添加配置文件参数
+    if (configPath) {
+      args.push('--config', configPath)
+    }
+    
+    // 添加输出目录参数（确保Python使用统一的输出目录）
+    args.push('--output', outputDir)
 
     // 添加可选参数
     if (fields && fields.length > 0) {
@@ -243,22 +280,23 @@ app.post('/api/execute-task', async (req, res) => {
       console.log(`Python进程退出，代码: ${code}`)
       
       if (code === 0) {
-        // 查找输出文件
-        const outputDir = path.join(__dirname, '../../outputData')
-        fs.readdir(outputDir)
+        // 查找输出文件 - 使用与Python相同的输出目录
+        const outputDirPath = path.join(__dirname, '../../outputData')
+        fs.readdir(outputDirPath)
           .then(files => {
             const resultFile = files
               .filter(f => f.endsWith('.xlsx') || f.endsWith('.csv'))
+              .filter(f => f.includes('_output'))  // 只查找输出文件
               .sort((a, b) => {
                 // 按修改时间排序，最新的在前
-                const statA = fs.statSync(path.join(outputDir, a))
-                const statB = fs.statSync(path.join(outputDir, b))
+                const statA = fs.statSync(path.join(outputDirPath, a))
+                const statB = fs.statSync(path.join(outputDirPath, b))
                 return statB.mtime - statA.mtime
               })[0]
             
             broadcast({
               type: 'completed',
-              resultFile: resultFile ? path.join(outputDir, resultFile) : null,
+              resultFile: resultFile || null,  // 只返回文件名，不包含路径
               message: '任务执行完成'
             })
           })

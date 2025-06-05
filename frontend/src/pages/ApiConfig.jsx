@@ -217,7 +217,7 @@ function ApiConfig() {
   return (
     <Row gutter={24}>
       {/* 左侧主要内容 */}
-      <Col span={16}>
+      <Col span={18}>
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
           {/* 页面标题和说明 */}
           <div>
@@ -261,14 +261,14 @@ function ApiConfig() {
               onChange={(e) => handleProviderChange(e.target.value)}
               style={{ width: '100%' }}
             >
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
                 {Object.entries(apiType === 'llm' ? LLM_PROVIDERS : AGENT_PROVIDERS).map(([key, provider]) => (
                   <Radio.Button key={key} value={key} style={{ height: 'auto', padding: '16px' }}>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontWeight: 600, marginBottom: 6 }}>{provider.name}</div>
                       {provider.api_url && (
                         <div style={{ fontSize: 12, color: '#8c8c8c', wordBreak: 'break-all' }}>
-                          {provider.api_url.length > 35 ? provider.api_url.substring(0, 35) + '...' : provider.api_url}
+                          {provider.api_url.length > 45 ? provider.api_url.substring(0, 45) + '...' : provider.api_url}
                         </div>
                       )}
                     </div>
@@ -286,69 +286,79 @@ function ApiConfig() {
               onValuesChange={handleFormChange}
               size="large"
             >
-              {/* API URL */}
-              <Form.Item
-                label="API URL"
-                name="api_url"
-                rules={[
-                  { required: true, message: '请输入API URL' },
-                  { pattern: /^https?:\/\//, message: 'URL必须以http://或https://开头' }
-                ]}
-                tooltip="API服务的完整URL地址"
-              >
-                <Input 
-                  placeholder="API服务地址"
-                  disabled={selectedProvider !== 'custom'}
-                />
-              </Form.Item>
-
-              {/* API密钥 */}
-              <Form.Item
-                label="API密钥"
-                name="api_key"
-                rules={[{ required: true, message: '请输入API密钥' }]}
-                tooltip="您的API访问密钥，确保具有相应的调用权限"
-              >
-                <Input.Password 
-                  placeholder="请输入您的API密钥"
-                />
-              </Form.Item>
-
-              {/* 模型名称 - 仅LLM类型显示 */}
-              {apiType === 'llm' && (
-                <Form.Item
-                  label="模型名称"
-                  name="model"
-                  rules={[{ required: true, message: '请输入模型名称' }]}
-                  tooltip="要使用的具体模型名称"
-                >
-                  {currentProvider?.models && currentProvider.models.length > 0 ? (
-                    <Select 
-                      placeholder="选择模型"
-                      options={currentProvider.models}
-                      allowClear
-                    />
-                  ) : (
+              <Row gutter={16}>
+                <Col span={24}>
+                  {/* API URL */}
+                  <Form.Item
+                    label="API URL"
+                    name="api_url"
+                    rules={[
+                      { required: true, message: '请输入API URL' },
+                      { pattern: /^https?:\/\//, message: 'URL必须以http://或https://开头' }
+                    ]}
+                    tooltip="API服务的完整URL地址"
+                  >
                     <Input 
-                      placeholder={currentProvider?.modelPlaceholder || '请输入模型名称'}
+                      placeholder="API服务地址"
+                      disabled={selectedProvider !== 'custom'}
                     />
-                  )}
-                </Form.Item>
-              )}
+                  </Form.Item>
+                </Col>
+              </Row>
 
-              {/* 应用ID - 仅Agent类型显示 */}
-              {apiType === 'agent' && (
-                <Form.Item
-                  label="应用ID (App ID)"
-                  name="app_id"
-                  rules={[{ required: true, message: '请输入应用ID' }]}
-                  tooltip="阿里云百炼平台的应用ID"
-                >
-                  <Input 
-                    placeholder="请输入应用ID"
-                  />
-                </Form.Item>
-              )}
+              <Row gutter={16}>
+                <Col span={12}>
+                  {/* API密钥 */}
+                  <Form.Item
+                    label="API密钥"
+                    name="api_key"
+                    rules={[{ required: true, message: '请输入API密钥' }]}
+                    tooltip="您的API访问密钥，确保具有相应的调用权限"
+                  >
+                    <Input.Password 
+                      placeholder="请输入您的API密钥"
+                    />
+                  </Form.Item>
+                </Col>
+
+                <Col span={12}>
+                  {/* 模型名称 - 仅LLM类型显示 */}
+                  {apiType === 'llm' && (
+                    <Form.Item
+                      label="模型名称"
+                      name="model"
+                      rules={[{ required: true, message: '请输入模型名称' }]}
+                      tooltip="要使用的具体模型名称"
+                    >
+                      {currentProvider?.models && currentProvider.models.length > 0 ? (
+                        <Select 
+                          placeholder="选择模型"
+                          options={currentProvider.models}
+                          allowClear
+                        />
+                      ) : (
+                        <Input 
+                          placeholder={currentProvider?.modelPlaceholder || '请输入模型名称'}
+                        />
+                      )}
+                    </Form.Item>
+                  )}
+
+                  {/* 应用ID - 仅Agent类型显示 */}
+                  {apiType === 'agent' && (
+                    <Form.Item
+                      label="应用ID (App ID)"
+                      name="app_id"
+                      rules={[{ required: true, message: '请输入应用ID' }]}
+                      tooltip="阿里云百炼平台的应用ID"
+                    >
+                      <Input 
+                        placeholder="请输入应用ID"
+                      />
+                    </Form.Item>
+                  )}
+                </Col>
+              </Row>
             </Form>
 
             {/* 验证按钮和结果 */}
@@ -381,7 +391,7 @@ function ApiConfig() {
       </Col>
 
       {/* 右侧配置说明 */}
-      <Col span={8}>
+      <Col span={6}>
         <Card title="配置说明" size="small" style={{ position: 'sticky', top: 24 }}>
           <Space direction="vertical" size="small">
             <div>

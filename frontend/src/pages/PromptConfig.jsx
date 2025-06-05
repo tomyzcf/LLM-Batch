@@ -160,7 +160,7 @@ function PromptConfig() {
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
       <Row gutter={24}>
         {/* 左侧主要内容 */}
-        <Col span={16}>
+        <Col span={18}>
           <Space direction="vertical" size="large" style={{ width: '100%' }}>
             {/* 页面标题和说明 */}
             <div>
@@ -332,7 +332,7 @@ function PromptConfig() {
         </Col>
 
         {/* 右侧配置说明 */}
-        <Col span={8}>
+        <Col span={6}>
           <Card title="配置说明" size="small" style={{ position: 'sticky', top: 24 }}>
             <Space direction="vertical" size="small">
               <div>

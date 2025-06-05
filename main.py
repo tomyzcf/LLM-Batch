@@ -17,6 +17,8 @@ def parse_args():
                        help='提示词文件路径')
     
     # 可选参数
+    parser.add_argument('--config', type=str,
+                       help='配置文件路径（如果不指定，使用默认的config/config.yaml）')
     parser.add_argument('--fields', type=str,
                        help='要处理的输入字段，格式：1,2,3 或 1-5')
     parser.add_argument('--start-pos', type=int, default=1,
@@ -25,6 +27,8 @@ def parse_args():
                        help='结束处理的位置（包含）')
     parser.add_argument('--provider', type=str,
                        help='指定API提供商（将覆盖配置文件中的设置）')
+    parser.add_argument('--output', type=str,
+                       help='指定输出目录路径（默认为outputData）')
     
     return parser.parse_args()
 
@@ -48,8 +52,9 @@ async def main():
         # 解析命令行参数
         args = parse_args()
         
-        # 加载配置
-        config = Config()
+        # 加载配置（支持自定义配置文件）
+        config_file = args.config if args.config else "config/config.yaml"
+        config = Config(config_file)
         
         # 解析字段参数
         fields = parse_fields(args.fields) if args.fields else None
@@ -62,6 +67,10 @@ async def main():
         
         # 创建处理器
         processor = BatchProcessor(config, provider)
+        
+        # 如果指定了输出路径，设置输出目录
+        if args.output:
+            processor.set_output_dir(args.output)
         
         # 开始处理
         await processor.process_files(

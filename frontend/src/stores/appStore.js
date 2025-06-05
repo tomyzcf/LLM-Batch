@@ -9,7 +9,7 @@ const useAppStore = create((set, get) => ({
   apiConfig: {
     api_type: 'llm', // 默认选择LLM类型
     provider: 'deepseek', // 默认选择DeepSeek
-    api_url: 'https://api.deepseek.com/v1/chat/completions', // DeepSeek默认URL
+    api_url: 'https://api.deepseek.com',
     api_key: '',
     model: 'deepseek-chat', // 默认选择V3模型
     app_id: '' // 阿里百炼Agent专用
@@ -368,7 +368,7 @@ const useAppStore = create((set, get) => ({
     apiConfig: {
       api_type: 'llm',
       provider: 'deepseek',
-      api_url: 'https://api.deepseek.com/v1/chat/completions',
+      api_url: 'https://api.deepseek.com',
       api_key: '',
       model: 'deepseek-chat',
       app_id: ''

@@ -22,6 +22,12 @@ class BatchProcessor:
         self.config = config
         self.provider = provider
         self.process_config = config.process_config
+        self.output_dir = Path('outputData')  # 默认输出目录
+        
+    def set_output_dir(self, output_dir: str):
+        """设置输出目录"""
+        self.output_dir = Path(output_dir)
+        Logger.info(f"设置输出目录为: {self.output_dir}")
         
     async def process_files(
         self,
@@ -86,7 +92,7 @@ class BatchProcessor:
                 rel_path = Path(file_path.name)
         
         base_name = rel_path.stem
-        output_dir = Path('outputData')
+        output_dir = self.output_dir
         if rel_path.parent != Path('.'):
             output_dir = output_dir / rel_path.parent
         output_dir.mkdir(parents=True, exist_ok=True)
