@@ -34,7 +34,10 @@ class UniversalLLMProvider(BaseProvider):
         if 'dashscope.aliyuncs.com' in base_url_lower:
             return '/chat/completions'
         elif 'volces.com' in base_url_lower:
-            return '/api/v3/chat/completions'  
+            if '/api/v3/batch' in base_url_lower:
+                return '/chat/completions'
+            else:
+                return '/api/v3/chat/completions'
         else:
             # DeepSeek, OpenAI 等标准格式
             return '/v1/chat/completions'
