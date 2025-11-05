@@ -225,13 +225,8 @@ class BatchProcessor:
                         try:
                             if isinstance(result, Exception):
                                 # 错误处理
+                                stats['api_error'] += 1
                                 error_type = "API错误"
-                                if isinstance(result, json.JSONDecodeError):
-                                    stats['json_error'] += 1
-                                    error_type = "JSON解析错误"
-                                else:
-                                    stats['api_error'] += 1
-                                    error_type = "API错误"
                                 
                                 Logger.error(f"重试失败 ({error_type}): {str(result)}")
                                 
@@ -250,25 +245,76 @@ class BatchProcessor:
                                         f.write('\n')
                             
                             elif isinstance(result, dict):
-                                # 成功处理
-                                stats['success'] += 1
-                                
-                                # 写入raw文件
-                                with open(raw_file, 'a', encoding='utf-8') as f:
-                                    json.dump(result, f, ensure_ascii=False)
-                                    f.write('\n')
-                                
-                                # 写入输出文件
-                                if output_headers is None and result:
-                                    output_headers = list(result.keys())
-                                    if not output_file.exists():
-                                        with open(output_file, 'w', encoding='utf-8-sig', newline='') as f:
+                                # 新格式：包含原始响应和解析结果
+                                if '_raw_response' in result:
+                                    # 先保存原始响应到raw.json
+                                    raw_data = {
+                                        "raw_response": result.get('_raw_response'),
+                                        "raw_content": result.get('_raw_content'),
+                                        "input": content
+                                    }
+                                    with open(raw_file, 'a', encoding='utf-8') as f:
+                                        json.dump(raw_data, f, ensure_ascii=False)
+                                        f.write('\n')
+                                    
+                                    # 检查是否解析成功
+                                    if result.get('_parse_error') is None and result.get('_parsed_data') is not None:
+                                        # 解析成功
+                                        stats['success'] += 1
+                                        parsed_data = result['_parsed_data']
+                                        
+                                        # 写入输出文件
+                                        if output_headers is None and parsed_data:
+                                            output_headers = list(parsed_data.keys())
+                                            if not output_file.exists():
+                                                with open(output_file, 'w', encoding='utf-8-sig', newline='') as f:
+                                                    writer = csv.DictWriter(f, fieldnames=output_headers)
+                                                    writer.writeheader()
+                                        
+                                        with open(output_file, 'a', encoding='utf-8-sig', newline='') as f:
                                             writer = csv.DictWriter(f, fieldnames=output_headers)
-                                            writer.writeheader()
-                                
-                                with open(output_file, 'a', encoding='utf-8-sig', newline='') as f:
-                                    writer = csv.DictWriter(f, fieldnames=output_headers)
-                                    writer.writerow(result)
+                                            writer.writerow(parsed_data)
+                                    else:
+                                        # 解析失败
+                                        stats['json_error'] += 1
+                                        error_type = "JSON解析错误"
+                                        error_details = result.get('_parse_error', '未知错误')
+                                        Logger.error(f"重试解析失败: {error_details}")
+                                        
+                                        # 记录到错误文件
+                                        if input_path.suffix.lower() == '.csv':
+                                            with open(error_file, 'a', encoding='utf-8') as f:
+                                                f.write(f'"{content.replace(chr(34), chr(34)+chr(34))}",{error_type}\n')
+                                        else:
+                                            with open(error_file, 'a', encoding='utf-8') as f:
+                                                error_data = {
+                                                    "content": content,
+                                                    "error_type": error_type,
+                                                    "error_details": error_details,
+                                                    "raw_content": result.get('_raw_content', '')[:500]
+                                                }
+                                                json.dump(error_data, f, ensure_ascii=False)
+                                                f.write('\n')
+                                else:
+                                    # 兼容旧格式
+                                    stats['success'] += 1
+                                    
+                                    # 写入raw文件
+                                    with open(raw_file, 'a', encoding='utf-8') as f:
+                                        json.dump(result, f, ensure_ascii=False)
+                                        f.write('\n')
+                                    
+                                    # 写入输出文件
+                                    if output_headers is None and result:
+                                        output_headers = list(result.keys())
+                                        if not output_file.exists():
+                                            with open(output_file, 'w', encoding='utf-8-sig', newline='') as f:
+                                                writer = csv.DictWriter(f, fieldnames=output_headers)
+                                                writer.writeheader()
+                                    
+                                    with open(output_file, 'a', encoding='utf-8-sig', newline='') as f:
+                                        writer = csv.DictWriter(f, fieldnames=output_headers)
+                                        writer.writerow(result)
                             
                             else:
                                 stats['other_error'] += 1
@@ -501,14 +547,9 @@ class BatchProcessor:
                     for item, result in zip(items, results):
                         try:
                             if isinstance(result, Exception):
-                                # 判断错误类型
+                                # 判断错误类型（API调用失败等）
+                                stats['api_error'] += 1
                                 error_type = "API错误"
-                                if isinstance(result, json.JSONDecodeError):
-                                    stats['json_error'] += 1
-                                    error_type = "JSON解析错误"
-                                else:
-                                    stats['api_error'] += 1
-                                    error_type = "API错误"
                                 
                                 Logger.error(f"处理失败 ({error_type}): {str(result)}")
                                 
@@ -534,7 +575,66 @@ class BatchProcessor:
                                         Logger.error(f"写入错误记录失败: {str(e)}")
                                         Logger.error(f"原始内容: {item['content'][:100]}...")
                                 
-                            elif isinstance(result, dict):  # 如果结果已经是字典，直接处理
+                            elif isinstance(result, dict):
+                                # 新格式：包含原始响应和解析结果
+                                if '_raw_response' in result:
+                                    # 先保存原始响应到raw.json
+                                    raw_data = {
+                                        "raw_response": result.get('_raw_response'),
+                                        "raw_content": result.get('_raw_content'),
+                                        "input": item['content']
+                                    }
+                                    with open(raw_file, 'a', encoding='utf-8') as f:
+                                        json.dump(raw_data, f, ensure_ascii=False)
+                                        f.write('\n')
+                                    
+                                    # 检查是否解析成功
+                                    if result.get('_parse_error') is None and result.get('_parsed_data') is not None:
+                                        # 解析成功
+                                        stats['success'] += 1
+                                        parsed_data = result['_parsed_data']
+                                        
+                                        # 写入输出文件
+                                        if output_headers is None and parsed_data:
+                                            output_headers = list(parsed_data.keys())
+                                            if not output_file.exists():
+                                                with open(output_file, 'w', encoding='utf-8-sig', newline='') as f:
+                                                    writer = csv.DictWriter(f, fieldnames=output_headers)
+                                                    writer.writeheader()
+                                        
+                                        with open(output_file, 'a', encoding='utf-8-sig', newline='') as f:
+                                            writer = csv.DictWriter(f, fieldnames=output_headers)
+                                            writer.writerow(parsed_data)
+                                    else:
+                                        # 解析失败
+                                        stats['json_error'] += 1
+                                        error_type = "JSON解析错误"
+                                        error_details = result.get('_parse_error', '未知错误')
+                                        Logger.error(f"JSON解析失败: {error_details}")
+                                        
+                                        # 记录到错误文件
+                                        if file_path.suffix.lower() == '.csv':
+                                            with open(error_file, 'a', encoding='utf-8') as f:
+                                                f.write(f'"{item["content"].replace(chr(34), chr(34)+chr(34))}",{error_type}\n')
+                                        else:
+                                            try:
+                                                try:
+                                                    error_data = json.loads(item['content'])
+                                                except:
+                                                    error_data = {"content": item['content']}
+                                                
+                                                error_data['error_type'] = error_type
+                                                error_data['error_details'] = error_details
+                                                error_data['raw_content'] = result.get('_raw_content', '')[:500]  # 保存部分原始内容用于调试
+                                                with open(error_file, 'a', encoding='utf-8') as f:
+                                                    json.dump(error_data, f, ensure_ascii=False)
+                                                    f.write('\n')
+                                            except Exception as e:
+                                                Logger.error(f"写入错误记录失败: {str(e)}")
+                                    
+                                    continue
+                                
+                                # 兼容旧格式处理
                                 try:
                                     # 检查是否是特殊格式：包含content和usage字段
                                     if 'content' in result and 'usage' in result:

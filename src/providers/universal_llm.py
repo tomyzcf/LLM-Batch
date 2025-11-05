@@ -105,6 +105,7 @@ class UniversalLLMProvider(BaseProvider):
         """处理API响应"""
         if response.status == 200:
             result = await response.json()
+            # 保存原始响应和解析结果
             return self._parse_success_response(result)
         
         elif response.status in [429, 503, 502, 504]:
@@ -126,14 +127,31 @@ class UniversalLLMProvider(BaseProvider):
             Logger.error(error_msg)
             raise Exception(error_msg)
     
-    def _parse_success_response(self, result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """解析成功的API响应"""
+    def _parse_success_response(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """解析成功的API响应
+        
+        返回格式：
+        {
+            "_raw_response": "原始API完整响应(JSON字符串)",
+            "_raw_content": "LLM返回的原始文本内容",
+            "_parsed_data": 解析后的字典 或 None,
+            "_parse_error": 解析错误信息 或 None
+        }
+        """
+        # 保存完整的原始响应
+        raw_response = json.dumps(result, ensure_ascii=False)
+        
         try:
             # 检查响应格式
             if 'choices' not in result or not result['choices']:
                 error_msg = "API返回无效响应：缺少choices字段"
                 Logger.error(error_msg)
-                raise ValueError(error_msg)
+                return {
+                    "_raw_response": raw_response,
+                    "_raw_content": None,
+                    "_parsed_data": None,
+                    "_parse_error": error_msg
+                }
             
             # 提取LLM返回的内容
             content = result['choices'][0]['message']['content']
@@ -147,30 +165,53 @@ class UniversalLLMProvider(BaseProvider):
                 # 如果是Markdown代码块，提取其中的JSON内容
                 json_content = md_json_match.group(1).strip()
                 try:
-                    return json.loads(json_content)
+                    parsed_data = json.loads(json_content)
+                    return {
+                        "_raw_response": raw_response,
+                        "_raw_content": content,
+                        "_parsed_data": parsed_data,
+                        "_parse_error": None
+                    }
                 except json.JSONDecodeError as e:
                     error_msg = f"Markdown代码块中的JSON解析失败: {str(e)}"
                     Logger.error(error_msg)
                     Logger.error(f"代码块内容: {json_content[:200]}...")
-                    raise json.JSONDecodeError(f"{error_msg}\n内容: {json_content[:200]}...", json_content, 0)
+                    return {
+                        "_raw_response": raw_response,
+                        "_raw_content": content,
+                        "_parsed_data": None,
+                        "_parse_error": error_msg
+                    }
             
             # 然后尝试直接解析为JSON
             try:
-                return json.loads(content)
+                parsed_data = json.loads(content)
+                return {
+                    "_raw_response": raw_response,
+                    "_raw_content": content,
+                    "_parsed_data": parsed_data,
+                    "_parse_error": None
+                }
             except json.JSONDecodeError as e:
                 error_msg = f"JSON解析失败: {str(e)}"
                 Logger.error(error_msg)
-                # 记录原始内容以便调试
                 Logger.debug(f"原始响应内容: {content[:200]}...")
-                raise json.JSONDecodeError(f"{error_msg}\n内容: {content[:200]}...", content, 0)
+                return {
+                    "_raw_response": raw_response,
+                    "_raw_content": content,
+                    "_parsed_data": None,
+                    "_parse_error": error_msg
+                }
                 
-        except json.JSONDecodeError:
-            # 重新抛出JSON解析错误
-            raise
         except Exception as e:
             error_msg = f"处理返回内容时出错: {str(e)}"
             Logger.error(error_msg)
-            raise Exception(error_msg) from e
+            return {
+                "_raw_response": raw_response,
+                "_raw_content": None,
+                "_parsed_data": None,
+                "_parse_error": error_msg
+            }
     
     async def _handle_retry(
         self,
