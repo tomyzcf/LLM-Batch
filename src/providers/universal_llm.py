@@ -122,16 +122,18 @@ class UniversalLLMProvider(BaseProvider):
         else:
             # 不可重试的错误
             error_text = await response.text()
-            Logger.error(f"API请求失败 [状态码:{response.status}] - {error_text}")
-            return None
+            error_msg = f"API请求失败 [状态码:{response.status}] - {error_text}"
+            Logger.error(error_msg)
+            raise Exception(error_msg)
     
     def _parse_success_response(self, result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """解析成功的API响应"""
         try:
             # 检查响应格式
             if 'choices' not in result or not result['choices']:
-                Logger.error("API返回无效响应：缺少choices字段")
-                return None
+                error_msg = "API返回无效响应：缺少choices字段"
+                Logger.error(error_msg)
+                raise ValueError(error_msg)
             
             # 提取LLM返回的内容
             content = result['choices'][0]['message']['content']
@@ -147,22 +149,28 @@ class UniversalLLMProvider(BaseProvider):
                 try:
                     return json.loads(json_content)
                 except json.JSONDecodeError as e:
-                    Logger.error(f"Markdown代码块中的JSON解析失败: {str(e)}")
+                    error_msg = f"Markdown代码块中的JSON解析失败: {str(e)}"
+                    Logger.error(error_msg)
                     Logger.error(f"代码块内容: {json_content[:200]}...")
-                    return None
+                    raise json.JSONDecodeError(f"{error_msg}\n内容: {json_content[:200]}...", json_content, 0)
             
             # 然后尝试直接解析为JSON
             try:
                 return json.loads(content)
             except json.JSONDecodeError as e:
-                Logger.error(f"JSON解析失败: {str(e)}")
+                error_msg = f"JSON解析失败: {str(e)}"
+                Logger.error(error_msg)
                 # 记录原始内容以便调试
                 Logger.debug(f"原始响应内容: {content[:200]}...")
-                return None
+                raise json.JSONDecodeError(f"{error_msg}\n内容: {content[:200]}...", content, 0)
                 
+        except json.JSONDecodeError:
+            # 重新抛出JSON解析错误
+            raise
         except Exception as e:
-            Logger.error(f"处理返回内容时出错: {str(e)}")
-            return None
+            error_msg = f"处理返回内容时出错: {str(e)}"
+            Logger.error(error_msg)
+            raise Exception(error_msg) from e
     
     async def _handle_retry(
         self,

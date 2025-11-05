@@ -67,6 +67,240 @@ class BatchProcessor:
                     end_pos
                 )
     
+    async def retry_failed_records(
+        self,
+        input_path: Path,
+        prompt_file: Path
+    ):
+        """重试失败的记录
+        
+        Args:
+            input_path: 原始输入文件路径
+            prompt_file: 提示词文件路径
+        """
+        # 解析提示词文件
+        try:
+            prompt_data = PromptParser.parse_prompt_file(prompt_file)
+            prompt_content = PromptParser.build_prompt_content(prompt_data, "combined")
+            Logger.info(f"提示词格式：{prompt_file.suffix.upper()}")
+            Logger.info(f"提示词文件：{prompt_file}")
+        except Exception as e:
+            Logger.error(f"解析提示词文件失败：{str(e)}")
+            return
+        
+        # 确定错误文件路径
+        try:
+            rel_path = input_path.relative_to(Path('inputData'))
+        except ValueError:
+            parts = input_path.parts
+            if 'inputData' in parts:
+                idx = parts.index('inputData')
+                rel_path = Path(*parts[idx + 1:])
+            else:
+                rel_path = Path(input_path.name)
+        
+        base_name = rel_path.stem
+        output_dir = self.output_dir
+        if rel_path.parent != Path('.'):
+            output_dir = output_dir / rel_path.parent
+        
+        error_file = output_dir / f"{base_name}_error{input_path.suffix}"
+        
+        if not error_file.exists():
+            Logger.warning(f"未找到错误文件: {error_file}")
+            Logger.info("没有需要重试的记录")
+            return
+        
+        Logger.info(f"找到错误文件: {error_file}")
+        
+        # 读取错误记录
+        failed_items = []
+        try:
+            if input_path.suffix.lower() == '.csv':
+                # CSV格式
+                with open(error_file, 'r', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        if 'content' in row:
+                            failed_items.append(row['content'])
+            elif input_path.suffix.lower() in ['.xlsx', '.xls']:
+                # Excel格式 - 需要读取原始数据
+                df_error = pd.read_excel(error_file)
+                # 假设第一列是content
+                if len(df_error.columns) > 0:
+                    for _, row in df_error.iterrows():
+                        # 将整行转换为字符串
+                        content = str(row.iloc[0]) if len(row) > 0 else ""
+                        if content:
+                            failed_items.append(content)
+            else:
+                # JSON格式
+                with open(error_file, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        try:
+                            error_data = json.loads(line.strip())
+                            if 'content' in error_data:
+                                failed_items.append(error_data['content'])
+                        except json.JSONDecodeError:
+                            continue
+        except Exception as e:
+            Logger.error(f"读取错误文件失败: {str(e)}")
+            return
+        
+        if not failed_items:
+            Logger.info("错误文件中没有可重试的记录")
+            return
+        
+        Logger.info(f"找到 {len(failed_items)} 条失败记录，开始重试...")
+        
+        # 备份错误文件
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_dir = output_dir / "backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        backup_error_file = backup_dir / f"{error_file.stem}_{timestamp}{error_file.suffix}"
+        shutil.copy2(error_file, backup_error_file)
+        Logger.info(f"已备份错误文件: {backup_error_file}")
+        
+        # 清空错误文件，准备记录新的错误
+        if input_path.suffix.lower() == '.csv':
+            with open(error_file, 'w', encoding='utf-8') as f:
+                f.write("content,error_type\n")
+        else:
+            error_file.unlink()
+        
+        # 设置日志文件
+        log_file = output_dir / f"{base_name}_retry.log"
+        Logger.set_log_file(log_file)
+        
+        # 获取输出文件
+        output_file = output_dir / f"{base_name}_output{input_path.suffix}"
+        raw_file = output_dir / f"{base_name}_raw.json"
+        
+        # 统计信息
+        stats = {
+            'total': len(failed_items),
+            'success': 0,
+            'api_error': 0,
+            'json_error': 0,
+            'other_error': 0
+        }
+        
+        # 创建API会话
+        async with await self.provider.create_session() as session:
+            batch_size = self.process_config.get('batch_size', 5)
+            
+            # 读取现有输出文件的表头
+            output_headers = None
+            if output_file.exists():
+                if input_path.suffix.lower() == '.csv':
+                    with open(output_file, 'r', encoding='utf-8-sig', newline='') as f:
+                        reader = csv.reader(f)
+                        output_headers = next(reader, None)
+            
+            # 创建进度条
+            pbar = tqdm(total=len(failed_items), desc="重试进度", unit="条")
+            
+            try:
+                # 分批处理
+                for i in range(0, len(failed_items), batch_size):
+                    batch_items = failed_items[i:i+batch_size]
+                    
+                    # 处理这一批
+                    tasks = []
+                    for content in batch_items:
+                        task = self.provider.process_request(
+                            session,
+                            prompt_content,
+                            content
+                        )
+                        tasks.append(task)
+                    
+                    # 等待所有任务完成
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    
+                    # 处理结果
+                    for content, result in zip(batch_items, results):
+                        item = {'content': content}
+                        
+                        try:
+                            if isinstance(result, Exception):
+                                # 错误处理
+                                error_type = "API错误"
+                                if isinstance(result, json.JSONDecodeError):
+                                    stats['json_error'] += 1
+                                    error_type = "JSON解析错误"
+                                else:
+                                    stats['api_error'] += 1
+                                    error_type = "API错误"
+                                
+                                Logger.error(f"重试失败 ({error_type}): {str(result)}")
+                                
+                                # 再次记录到错误文件
+                                if input_path.suffix.lower() == '.csv':
+                                    with open(error_file, 'a', encoding='utf-8') as f:
+                                        f.write(f'"{content.replace(chr(34), chr(34)+chr(34))}",{error_type}\n')
+                                else:
+                                    with open(error_file, 'a', encoding='utf-8') as f:
+                                        error_data = {
+                                            "content": content,
+                                            "error_type": error_type,
+                                            "error_details": str(result)
+                                        }
+                                        json.dump(error_data, f, ensure_ascii=False)
+                                        f.write('\n')
+                            
+                            elif isinstance(result, dict):
+                                # 成功处理
+                                stats['success'] += 1
+                                
+                                # 写入raw文件
+                                with open(raw_file, 'a', encoding='utf-8') as f:
+                                    json.dump(result, f, ensure_ascii=False)
+                                    f.write('\n')
+                                
+                                # 写入输出文件
+                                if output_headers is None and result:
+                                    output_headers = list(result.keys())
+                                    if not output_file.exists():
+                                        with open(output_file, 'w', encoding='utf-8-sig', newline='') as f:
+                                            writer = csv.DictWriter(f, fieldnames=output_headers)
+                                            writer.writeheader()
+                                
+                                with open(output_file, 'a', encoding='utf-8-sig', newline='') as f:
+                                    writer = csv.DictWriter(f, fieldnames=output_headers)
+                                    writer.writerow(result)
+                            
+                            else:
+                                stats['other_error'] += 1
+                                Logger.error(f"重试返回了非预期的结果类型: {type(result)}")
+                        
+                        except Exception as e:
+                            stats['other_error'] += 1
+                            Logger.error(f"处理重试结果时出错: {str(e)}")
+                        
+                        pbar.update(1)
+                    
+                    # 短暂休息
+                    await asyncio.sleep(0.1)
+            
+            finally:
+                pbar.close()
+        
+        # 输出统计信息
+        Logger.info(f"\n重试完成。统计信息:\n" + 
+                  f"总记录: {stats['total']}\n" +
+                  f"成功: {stats['success']}\n" +
+                  f"API错误: {stats['api_error']}\n" +
+                  f"JSON解析错误: {stats['json_error']}\n" +
+                  f"其他错误: {stats['other_error']}")
+        
+        if stats['success'] == stats['total']:
+            Logger.info("所有失败记录已成功重试！")
+        elif stats['success'] > 0:
+            Logger.info(f"成功重试 {stats['success']} 条记录，还有 {stats['total'] - stats['success']} 条记录仍然失败")
+        else:
+            Logger.warning("所有记录重试仍然失败")
+    
     async def _process_single_file(
         self,
         file_path: Path,
@@ -267,13 +501,21 @@ class BatchProcessor:
                     for item, result in zip(items, results):
                         try:
                             if isinstance(result, Exception):
-                                stats['api_error'] += 1
-                                Logger.error(f"处理失败: {str(result)}")
+                                # 判断错误类型
+                                error_type = "API错误"
+                                if isinstance(result, json.JSONDecodeError):
+                                    stats['json_error'] += 1
+                                    error_type = "JSON解析错误"
+                                else:
+                                    stats['api_error'] += 1
+                                    error_type = "API错误"
                                 
-                                # 记录API错误
+                                Logger.error(f"处理失败 ({error_type}): {str(result)}")
+                                
+                                # 记录错误
                                 if file_path.suffix.lower() == '.csv':
                                     with open(error_file, 'a', encoding='utf-8') as f:
-                                        f.write(f"{item['content']},API错误\n")
+                                        f.write(f'"{item["content"].replace(chr(34), chr(34)+chr(34))}",{error_type}\n')
                                 else:
                                     try:
                                         # 尝试解析原始内容
@@ -283,7 +525,7 @@ class BatchProcessor:
                                             # 如果不是JSON，创建一个包含原始内容的字典
                                             error_data = {"content": item['content']}
                                         
-                                        error_data['error_type'] = 'API错误'
+                                        error_data['error_type'] = error_type
                                         error_data['error_details'] = str(result)
                                         with open(error_file, 'a', encoding='utf-8') as f:
                                             json.dump(error_data, f, ensure_ascii=False)

@@ -29,6 +29,8 @@ def parse_args():
                        help='指定API提供商（将覆盖配置文件中的设置）')
     parser.add_argument('--output', type=str,
                        help='指定输出目录路径（默认为outputData）')
+    parser.add_argument('--retry-errors', action='store_true',
+                       help='重试失败的记录（从error文件中读取并重新处理）')
     
     return parser.parse_args()
 
@@ -72,14 +74,25 @@ async def main():
         if args.output:
             processor.set_output_dir(args.output)
         
-        # 开始处理
-        await processor.process_files(
-            Path(args.input_path),
-            Path(args.prompt_file),
-            fields,
-            args.start_pos,
-            args.end_pos
-        )
+        # 根据模式选择处理方式
+        if args.retry_errors:
+            # 重试失败的记录
+            Logger.info("=" * 60)
+            Logger.info("启动失败重试模式")
+            Logger.info("=" * 60)
+            await processor.retry_failed_records(
+                Path(args.input_path),
+                Path(args.prompt_file)
+            )
+        else:
+            # 正常处理
+            await processor.process_files(
+                Path(args.input_path),
+                Path(args.prompt_file),
+                fields,
+                args.start_pos,
+                args.end_pos
+            )
         
     except KeyboardInterrupt:
         Logger.warning("\n检测到中断，正在退出...")
