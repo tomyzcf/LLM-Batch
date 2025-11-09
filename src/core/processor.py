@@ -15,6 +15,116 @@ from ..utils.file_utils import FileProcessor
 from ..utils.prompt_parser import PromptParser
 from ..providers.base import BaseProvider
 
+def extract_expected_fields(prompt_content: str) -> List[str]:
+    """从提示词中提取期望的字段名
+    
+    Args:
+        prompt_content: 提示词内容
+        
+    Returns:
+        期望的字段名列表
+    """
+    import re
+    import json
+    
+    try:
+        # 尝试从[输出格式]部分提取JSON
+        output_format_match = re.search(r'\[输出格式\](.*?)(?:\[|$)', prompt_content, re.DOTALL)
+        if output_format_match:
+            output_format = output_format_match.group(1).strip()
+            # 尝试解析JSON
+            try:
+                json_obj = json.loads(output_format)
+                if isinstance(json_obj, dict):
+                    return list(json_obj.keys())
+            except json.JSONDecodeError:
+                # 如果不是标准JSON，尝试提取字段名
+                # 匹配 "字段名": "类型" 的模式
+                field_pattern = r'"([^"]+)"\s*:\s*"[^"]*"'
+                fields = re.findall(field_pattern, output_format)
+                if fields:
+                    return fields
+    except Exception:
+        pass
+    
+    return []
+
+def calculate_similarity(s1: str, s2: str) -> float:
+    """计算两个字符串的相似度（使用简单的编辑距离）
+    
+    Args:
+        s1: 字符串1
+        s2: 字符串2
+        
+    Returns:
+        相似度（0-1之间，1表示完全相同）
+    """
+    if s1 == s2:
+        return 1.0
+    
+    # 简单的相似度计算：共同字符比例
+    set1 = set(s1)
+    set2 = set(s2)
+    if not set1 and not set2:
+        return 1.0
+    if not set1 or not set2:
+        return 0.0
+    
+    intersection = len(set1 & set2)
+    union = len(set1 | set2)
+    return intersection / union if union > 0 else 0.0
+
+def normalize_field_names(data: Dict[str, Any], expected_fields: List[str] = None) -> Dict[str, Any]:
+    """修正字段名，使用期望字段名进行智能匹配
+    
+    Args:
+        data: 解析后的数据字典
+        expected_fields: 期望的字段名列表（如果为None，则不进行修正）
+        
+    Returns:
+        修正后的数据字典
+    """
+    if not isinstance(data, dict):
+        return data
+    
+    if not expected_fields:
+        return data
+    
+    normalized_data = {}
+    used_expected_fields = set()
+    
+    for key, value in data.items():
+        # 如果字段名已经在期望列表中，直接使用
+        if key in expected_fields and key not in used_expected_fields:
+            normalized_data[key] = value
+            used_expected_fields.add(key)
+            continue
+        
+        # 尝试找到最相似的期望字段名
+        best_match = None
+        best_similarity = 0.0
+        
+        for expected_field in expected_fields:
+            if expected_field in used_expected_fields:
+                continue
+            
+            similarity = calculate_similarity(key, expected_field)
+            if similarity > best_similarity and similarity >= 0.7:  # 相似度阈值
+                best_similarity = similarity
+                best_match = expected_field
+        
+        if best_match:
+            # 使用最相似的期望字段名
+            normalized_data[best_match] = value
+            used_expected_fields.add(best_match)
+            if best_match != key:
+                Logger.debug(f"字段名修正: '{key}' -> '{best_match}' (相似度: {best_similarity:.2f})")
+        else:
+            # 没有找到匹配的，保持原字段名
+            normalized_data[key] = value
+    
+    return normalized_data
+
 class BatchProcessor:
     """批处理器"""
     
@@ -47,13 +157,20 @@ class BatchProcessor:
         except Exception as e:
             Logger.error(f"解析提示词文件失败：{str(e)}")
             return
+        
+        # 从提示词中提取期望字段名
+        expected_fields = extract_expected_fields(prompt_content)
+        if expected_fields:
+            Logger.info(f"从提示词中提取到期望字段: {expected_fields}")
+        else:
+            Logger.warning("未能从提示词中提取期望字段，将不进行字段名修正")
             
         # 获取输入文件列表
         input_files = FileProcessor.get_input_files(input_path)
         if not input_files:
             Logger.error("未找到支持的输入文件")
             return
-            
+        
         # 创建API会话
         async with await self.provider.create_session() as session:
             # 处理每个文件
@@ -64,7 +181,8 @@ class BatchProcessor:
                     session,
                     fields,
                     start_pos,
-                    end_pos
+                    end_pos,
+                    expected_fields
                 )
     
     async def retry_failed_records(
@@ -87,6 +205,13 @@ class BatchProcessor:
         except Exception as e:
             Logger.error(f"解析提示词文件失败：{str(e)}")
             return
+        
+        # 从提示词中提取期望字段名
+        expected_fields = extract_expected_fields(prompt_content)
+        if expected_fields:
+            Logger.info(f"从提示词中提取到期望字段: {expected_fields}")
+        else:
+            Logger.warning("未能从提示词中提取期望字段，将不进行字段名修正")
         
         # 确定错误文件路径
         try:
@@ -263,6 +388,9 @@ class BatchProcessor:
                                         stats['success'] += 1
                                         parsed_data = result['_parsed_data']
                                         
+                                        # 修正字段名
+                                        parsed_data = normalize_field_names(parsed_data, expected_fields)
+                                        
                                         # 写入输出文件
                                         if output_headers is None and parsed_data:
                                             output_headers = list(parsed_data.keys())
@@ -298,6 +426,9 @@ class BatchProcessor:
                                 else:
                                     # 兼容旧格式
                                     stats['success'] += 1
+                                    
+                                    # 修正字段名
+                                    result = normalize_field_names(result, expected_fields)
                                     
                                     # 写入raw文件
                                     with open(raw_file, 'a', encoding='utf-8') as f:
@@ -354,7 +485,8 @@ class BatchProcessor:
         session: Any,
         fields: List[int],
         start_pos: int,
-        end_pos: Optional[int]
+        end_pos: Optional[int],
+        expected_fields: List[str] = None
     ):
         """处理单个文件"""
         # 设置输出文件路径
@@ -594,6 +726,9 @@ class BatchProcessor:
                                         stats['success'] += 1
                                         parsed_data = result['_parsed_data']
                                         
+                                        # 修正字段名
+                                        parsed_data = normalize_field_names(parsed_data, expected_fields)
+                                        
                                         # 写入输出文件
                                         if output_headers is None and parsed_data:
                                             output_headers = list(parsed_data.keys())
@@ -646,6 +781,8 @@ class BatchProcessor:
                                             json_content = md_json_match.group(1).strip()
                                             try:
                                                 result_dict = json.loads(json_content)
+                                                # 修正字段名
+                                                result_dict = normalize_field_names(result_dict, expected_fields)
                                                 stats['success'] += 1
                                                 with open(raw_file, 'a', encoding='utf-8') as f:
                                                     json.dump(result_dict, f, ensure_ascii=False)
@@ -707,6 +844,9 @@ class BatchProcessor:
                                             
                                             continue
                                     
+                                    # 修正字段名
+                                    result = normalize_field_names(result, expected_fields)
+                                    
                                     # 正常字典处理流程
                                     stats['success'] += 1
                                     with open(raw_file, 'a', encoding='utf-8') as f:
@@ -765,6 +905,8 @@ class BatchProcessor:
                                                 json_content = md_json_match.group(1).strip()
                                                 try:
                                                     result_dict = json.loads(json_content)
+                                                    # 修正字段名
+                                                    result_dict = normalize_field_names(result_dict, expected_fields)
                                                     stats['success'] += 1
                                                     with open(raw_file, 'a', encoding='utf-8') as f:
                                                         json.dump(result_dict, f, ensure_ascii=False)
@@ -810,6 +952,8 @@ class BatchProcessor:
                                                     result_dict = result_dict[0] if result_dict else {}
                                                 
                                                 if isinstance(result_dict, dict):
+                                                    # 修正字段名
+                                                    result_dict = normalize_field_names(result_dict, expected_fields)
                                                     stats['success'] += 1
                                                     with open(raw_file, 'a', encoding='utf-8') as f:
                                                         json.dump(result_dict, f, ensure_ascii=False)
